@@ -191,7 +191,7 @@
 #
 %Vl(MiniMusic,187,156,130,20,3)%s%ac%?it<%it|%fn>
 %Vl(MiniMusic,187,175,130,22,4)
-%s%ac%?it<%?if(%St(statusbar), =,off)<%t(6)%ia;%t(6)%id;%t(0)>%?if(%St(statusbar), =,top)<%id>%?if(%St(statusbar), =,bottom)<%ia>|%d(1)>
+%s%ac%?it<%ia|%d(1)>
 #
 %Vl(MiniRadio,187,156,130,20,3)%ac%s%?tm<%?tx<%ty|FM Radio>|%Tn>
 %Vl(MiniRadio,187,175,130,22,4)%ac%s%?tx<%tz|adwaitapod>
@@ -216,7 +216,7 @@
 %Vl(LockPlayer,16,150,288,75,-)%xd(NotificationMusic)
 %Vl(LockMusic,93,163,158,20,3)%s%al%?it<%it|%fn>
 %Vl(LockMusic,93,183,158,22,4)
-%s%al%?it<%?if(%St(statusbar), =,off)<%t(6)%ia;%t(6)%id;%t(0)>%?if(%St(statusbar), =,top)<%id>%?if(%St(statusbar), =,bottom)<%ia>|%d(1)>
+%s%al%?it<%ia|%d(1)>
 #
 %Vl(LockRadio,93,163,158,20,3)%al%s%?tm<%?tx<%ty|FM Radio>|%Tn>
 %Vl(LockRadio,93,183,158,22,4)%al%s%?tx<%tz|adwaitapod>
@@ -251,7 +251,7 @@
 #
 %Vl(AODMusic,10,163,-10,20,3)%Vf(000000)%s%ac%?it<%it|%fn>
 %Vl(AODMusic,10,183,-10,22,4)%Vf(000000)
-%s%ac%?it<%?if(%St(statusbar), =,off)<%t(6)%ia;%t(6)%id>%?if(%St(statusbar), =,top)<%id>%?if(%St(statusbar), =,bottom)<%ia>|%d(1)>
+%s%ac%?it<%ia|%d(1)>
 #
 %Vl(AODRadio,10,163,-10,20,3)%Vf(000000)%ac%s%?tm<%?tx<%ty|FM Radio>|%Tn>
 %Vl(AODRadio,10,183,-10,22,4)%Vf(000000)%ac%s%?tx<%tz|adwaitapod>
@@ -311,18 +311,18 @@
 %Vl(UserConfigTitle,44,3,232,20,3)%acPreferences
 #
 %Vl(SecTextConfig,12,35,-12,20,3)%VB%al%Sx(Music) Secondary Text %Sx(Settings)
-%Vl(SecTextConfig,12,57,-12,20,4)%VB%Vf(bdbabd)%alSets what information the player shows.
-%Vl(SecTextConfig,12,77,-12,20,4)%VB%Vf(bdbabd)%alThis affects all cases of music players.
+%Vl(SecTextConfig,12,57,-12,20,4)%VB%Vf(bdbabd)%alConfigures the third line of the player.
+%Vl(SecTextConfig,12,77,-12,20,4)%VB%Vf(bdbabd)%alShown below the artist name.
 %Vl(SecTextConfig,12,105,296,116,-)%VB%Vb(393839)%xd(BoxTop)
 %dr(0,10,1,-,212021)%dr(295,10,1,-,212021)
 %dr(0,39,-,1,212021)%dr(0,76,-,1,212021)
 %Vl(SecTextConfig,12,211,296,20,-)%VB%Vb(393839)%xd(BoxBottom)
 %Vl(SecTextButtons,19,87,16,16,-)%?if(%LR,=,1)<%?Lc<%xd(RadioButton,2)|%xd(RadioButton,1)>>
-%Vl(SecTextConfig,48,113,-20,20,4)%VB%Vb(393839)%al%Sx(Album) %Sx(Title) and %Sx(Artist) Name
+%Vl(SecTextConfig,48,113,-20,20,4)%VB%Vb(393839)%al%Sx(Album) %Sx(Title)
 %Vl(SecTextButtons,19,109,16,16,-)%?if(%LR,=,2)<%?Lc<%xd(RadioButton,2)|%xd(RadioButton,1)>>
-%Vl(SecTextConfig,48,151,220,20,4)%VB%Vb(393839)%al%Sx(Album) %Sx(Title)
+%Vl(SecTextConfig,48,151,220,20,4)%VB%Vb(393839)%alYear and Genre
 %Vl(SecTextButtons,19,131,16,16,-)%?if(%LR,=,3)<%?Lc<%xd(RadioButton,2)|%xd(RadioButton,1)>>
-%Vl(SecTextConfig,48,189,220,20,4)%VB%Vb(393839)%al%Sx(Artist) Name
+%Vl(SecTextConfig,48,189,220,20,4)%VB%Vb(393839)%al%Sx(Album) %Sx(Title) and Year/Genre
 #
 %Vl(AlbumArtConfig,12,35,-12,20,3)%VB%al%Sx(Album) Art %Sx(Settings)
 %Vl(AlbumArtConfig,12,57,-12,20,4)%VB%Vf(bdbabd)%alSets album art corners to be round or not.

@@ -119,10 +119,10 @@
 #
 #-- Toggle the Secondary info according to user preference --#
 %Vl(Player,178,83,-4,21,5)
-%s%al%?it<%?if(%St(statusbar), =,off)<%t(6)%ia;%t(6)%id;%t(0)>%?if(%St(statusbar), =,top)<%id>%?if(%St(statusbar), =,bottom)<%ia>|%d(1)>
+%s%al%?it<%ia|%d(1)>
 #
-%Vl(Player,178,112,-4,21,3)%Vf(bdbabd)
-%s%al%?it<%ss(0,4,%iy) %?ig<-> %ig|%fc>
+%Vl(Player,178,112,-4,21,3)
+%s%al%?it<%?if(%St(statusbar), =,off)<%id>%?if(%St(statusbar), =,top)<%ss(0,4,%iy) %?ig<-> %ig>%?if(%St(statusbar), =,bottom)<%t(6)%id;%t(6)%ss(0,4,%iy) %?ig<-> %ig;%t(0)>|%fc>
 #
 %Vl(Player,19,212,17,16,-)
 %?ps<|%?mm<%xd(PlaybackStatus,1)>>#No statuses
@@ -159,7 +159,7 @@
 %Vl(Lockscreen,261,180,12,14,-)%?mp<|%xd(LockPlayIcon,2)|%xd(LockPlayIcon,1)|>
 %Vl(Lockscreen,93,163,158,20,4)%s%al%?it<%it|%fn>
 %Vl(Lockscreen,93,183,158,22,3)
-%s%al%?it<%?if(%St(statusbar), =,off)<%t(6)%ia;%t(6)%id;%t(0)>%?if(%St(statusbar), =,top)<%id>%?if(%St(statusbar), =,bottom)<%ia>|%d(1)>
+%s%al%?it<%ia|%d(1)>
 #
 #------------ Always on Display ------------#
 %Vl(AlwaysOnDisplay,0,0,-,-,-)
@@ -176,4 +176,4 @@
 #
 %Vl(AlwaysOnDisplay,10,163,-10,20,4)%Vf(000000)%s%ac%?it<%it|%fn>
 %Vl(AlwaysOnDisplay,10,183,-10,22,3)%Vf(000000)
-%s%ac%?it<%?if(%St(statusbar), =,off)<%t(6)%ia;%t(6)%id>%?if(%St(statusbar), =,top)<%id>%?if(%St(statusbar), =,bottom)<%ia>|%d(1)>
+%s%ac%?it<%ia|%d(1)>

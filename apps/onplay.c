@@ -1177,6 +1177,10 @@ static int onplaymenu_callback(int action,
     (void)this_list;
     switch (action)
     {
+        case ACTION_STD_MENU:
+            if (this_item == &wps_onplay_menu)
+                return ACTION_STD_CANCEL;
+            break;
         case ACTION_TREE_STOP:
             if (this_item == &wps_onplay_menu)
             {
