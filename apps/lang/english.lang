@@ -14596,13 +14596,13 @@
   desc: in the pictureflow settings menu
   user: core
   <source>
-    *: "Number of slides"
+    *: "Slide Tuck"
   </source>
   <dest>
-    *: "Number of slides"
+    *: "Slide Tuck"
   </dest>
   <voice>
-    *: "Number of slides"
+    *: "Slide Tuck"
   </voice>
 </phrase>
 <phrase>

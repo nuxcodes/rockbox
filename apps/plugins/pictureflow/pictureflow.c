@@ -3093,13 +3093,12 @@ static inline pix_t fade_color(pix_t c, unsigned a)
  * then be incremented by (z + zo) and sin(r) respectively.
  */
 
-/* Clear only the PictureFlow viewport area (not the status bar) */
+/* Clear only the PictureFlow viewport area (not the status bar).
+ * Uses screen->clear_viewport() which fills with bg_pattern,
+ * unlike lcd_fillrect(DRMODE_SOLID) which fills with fg_pattern. */
 static void pf_clear_display(void)
 {
-    int old_mode = mylcd_get_drawmode();
-    mylcd_set_drawmode(DRMODE_SOLID);
-    mylcd_fillrect(0, 0, LCD_WIDTH, pf_height);
-    mylcd_set_drawmode(old_mode);
+    rb->screens[SCREEN_MAIN]->clear_viewport();
 }
 
 static void render_slide(struct slide_data *slide, const int alpha)
@@ -3154,14 +3153,22 @@ static void render_slide(struct slide_data *slide, const int alpha)
     xsdeni = sinr;
     int x;
     int dy = PFREAL_ONE;
+    const int half_height = pf_half_height;
+    const int lower_half = pf_lower_half;
+    const int display_offs = pf_display_offs;
+    const int reflect_height = pf_reflect_height;
+    const bool perspective = (zo != 0 || slide->angle != 0);
+    const int p_start_upper = (sh - 1 - display_offs) * PFREAL_ONE;
+    const int p_start_lower = (sh - display_offs) * PFREAL_ONE;
+    const int plim2_max = MIN(sh + reflect_height, sh * 2) * PFREAL_ONE;
     for (x = xi; x < w; x++) {
-        int column = (xs - slide_left) / PFREAL_ONE;
+        int column = (unsigned)(xs - slide_left) >> PFREAL_SHIFT;
         if (column >= sw)
             break;
-        if (zo || slide->angle)
+        if (perspective)
             dy = (CAM_DIST_R + zo + fmul(xs, sinr)) / CAM_DIST;
 
-        const pix_t *ptr = &src[column * bmp->height];
+        const pix_t *ptr = &src[column * sh];
 
 #if LCD_STRIDEFORMAT == VERTICAL_STRIDE
 #define PIXELSTEP_Y   1
@@ -3171,9 +3178,9 @@ static void render_slide(struct slide_data *slide, const int alpha)
 #define LCDADDR(x, y) (&buffer[(y)*BUFFER_WIDTH + (x)])
 #endif
 
-        int p = (bmp->height-1-pf_display_offs) * PFREAL_ONE;
-        int plim = MAX(0, p - (pf_half_height-1) * dy);
-        pix_t *pixel = LCDADDR(x, pf_half_height-1 );
+        int p = p_start_upper;
+        int plim = MAX(0, p - (half_height-1) * dy);
+        pix_t *pixel = LCDADDR(x, half_height-1 );
 
         if (alpha == 256) {
             while (p >= plim) {
@@ -3188,11 +3195,10 @@ static void render_slide(struct slide_data *slide, const int alpha)
                 pixel -= PIXELSTEP_Y;
             }
         }
-        p = (bmp->height-pf_display_offs) * PFREAL_ONE;
-        plim = MIN(sh * PFREAL_ONE, p + pf_lower_half * dy);
-        int plim2 = MIN(MIN(sh + pf_reflect_height, sh * 2) * PFREAL_ONE,
-                        p + pf_lower_half * dy);
-        pixel = LCDADDR(x, pf_half_height );
+        p = p_start_lower;
+        plim = MIN(sh * PFREAL_ONE, p + lower_half * dy);
+        int plim2 = MIN(plim2_max, p + lower_half * dy);
+        pixel = LCDADDR(x, half_height );
 
         if (alpha == 256) {
             while (p < plim) {
@@ -3215,7 +3221,7 @@ static void render_slide(struct slide_data *slide, const int alpha)
             pixel += PIXELSTEP_Y;
         }
 
-        if (zo || slide->angle)
+        if (perspective)
         {
             xsnum += xsnumi;
             xsden += xsdeni;
@@ -3450,9 +3456,32 @@ static void render_all_slides(void)
     } else {
         /* the first and last slide must fade in/fade out */
 
+        /* Check if the transitioning slide will be re-rendered later for
+         * z-order correction.  If so, skip its first render to avoid
+         * drawing an entire slide that gets immediately overwritten. */
+        bool skip_right_0 = false, skip_left_0 = false;
+        if (step > 0) {
+            PFreal cd = (center_slide.cx >= 0) ? center_slide.cx
+                                                : -center_slide.cx;
+            PFreal td = (right_slides[0].cx >= 0) ? right_slides[0].cx
+                                                    : -right_slides[0].cx;
+            skip_right_0 = (td < cd);
+        } else if (step < 0) {
+            PFreal cd = (center_slide.cx >= 0) ? center_slide.cx
+                                                : -center_slide.cx;
+            PFreal td = (left_slides[0].cx >= 0) ? left_slides[0].cx
+                                                   : -left_slides[0].cx;
+            skip_left_0 = (td < cd);
+        }
+
         /* if step<0 and nleft==1, left_slides[0] is fading in  */
         alpha = ((step > 0) ? 0 : ((nleft == 1) ? 256 : 128)) - fade / 2;
         for (index = nleft - 1; index >= 0; index--) {
+            if (index == 0 && skip_left_0) {
+                alpha += 128;
+                if (alpha > 256) alpha = 256;
+                continue;
+            }
             if (alpha > 0)
                 render_slide(&left_slides[index], alpha);
             alpha += 128;
@@ -3461,6 +3490,11 @@ static void render_all_slides(void)
         /* if step>0 and nright==1, right_slides[0] is fading in  */
         alpha = ((step > 0) ? ((nright == 1) ? 128 : 0) : -128) + fade / 2;
         for (index = nright - 1; index >= 0; index--) {
+            if (index == 0 && skip_right_0) {
+                alpha += 128;
+                if (alpha > 256) alpha = 256;
+                continue;
+            }
             if (alpha > 0)
                 render_slide(&right_slides[index], alpha);
             alpha += 128;
@@ -5179,6 +5213,7 @@ enum plugin_status plugin_start(const void *parameter)
         mylcd_set_background(pf_bg_color);
         mylcd_set_foreground(pf_fg_color);
 #endif
+        mylcd_set_drawmode(DRMODE_FG);
 
         set_initial_slide(file_id3 ? file : NULL); /* may call splash */
 #ifdef USEGSLIB
