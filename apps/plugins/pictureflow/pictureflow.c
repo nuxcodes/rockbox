@@ -3789,13 +3789,15 @@ static int main_menu(void)
     }
 }
 
-#define ZOOMIN_FRAME_COUNT  19
-#define ZOOMIN_FRAME_DIST   -5
-#define ZOOMIN_FRAME_ANGLE  1
-#define ZOOMIN_FRAME_FADE   13
+/* iPod Classic 6G custom: faster cover animation (~2x)
+   Same total movement, half the frames */
+#define ZOOMIN_FRAME_COUNT  10
+#define ZOOMIN_FRAME_DIST   -10
+#define ZOOMIN_FRAME_ANGLE  2
+#define ZOOMIN_FRAME_FADE   25
 
-#define ROTATE_FRAME_COUNT  15
-#define ROTATE_FRAME_ANGLE  16
+#define ROTATE_FRAME_COUNT  8
+#define ROTATE_FRAME_ANGLE  30
 
 #define KEYFRAME_COUNT ZOOMIN_FRAME_COUNT + ROTATE_FRAME_COUNT
 
@@ -4702,6 +4704,14 @@ static int pictureflow_main(void)
             case pf_cover_in:
                 update_cover_in_animation();
                 render_all_slides();
+                /* iPod 6G: preload track index during rotate phase so
+                   track list appears instantly when animation finishes */
+                if (cover_animation_keyframe == ZOOMIN_FRAME_COUNT + 1 &&
+                    center_slide.slide_index != pf_tracks.cur_idx)
+                {
+                    create_track_index(center_slide.slide_index);
+                    reset_track_list();
+                }
                 instant_update = true;
                 break;
             case pf_cover_out:
