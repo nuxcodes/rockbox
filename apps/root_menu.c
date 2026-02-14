@@ -72,6 +72,7 @@
 #endif
 #include "language.h"
 #include "plugin.h"
+#include "filetypes.h"
 #include "disk.h"
 
 struct root_items {
@@ -451,6 +452,24 @@ static int load_bmarks(void* param)
     return GO_TO_PREVIOUS;
 }
 
+#ifdef HAVE_TAGCACHE
+static int pictureflow_scrn(void* param)
+{
+    (void)param;
+    int ret = filetype_load_plugin("pictureflow", NULL);
+    switch (ret)
+    {
+        case PLUGIN_GOTO_WPS:
+            return GO_TO_WPS;
+        case PLUGIN_USB_CONNECTED:
+        case PLUGIN_ERROR:
+            return GO_TO_ROOT;
+        default:
+            return GO_TO_PREVIOUS;
+    }
+}
+#endif
+
 /* These are all static const'd from apps/menus/ *.c
    so little hack so we can use them */
 extern struct menu_item_ex
@@ -488,6 +507,9 @@ static const struct root_items items[] = {
     [GO_TO_PLAYLIST_VIEWER] = { playlist_view, NULL, &playlist_options },
     [GO_TO_SYSTEM_SCREEN] = { miscscrn, &info_menu, &system_menu },
     [GO_TO_SHORTCUTMENU] = { do_shortcut_menu, NULL, NULL },
+#ifdef HAVE_TAGCACHE
+    [GO_TO_PICTUREFLOW] = { pictureflow_scrn, NULL, NULL },
+#endif
 
 };
 //static const int nb_items = sizeof(items)/sizeof(*items);
@@ -504,6 +526,8 @@ MENUITEM_RETURNVALUE(file_browser, ID2P(LANG_DIR_BROWSER), GO_TO_FILEBROWSER,
 #ifdef HAVE_TAGCACHE
 MENUITEM_RETURNVALUE(db_browser, ID2P(LANG_TAGCACHE), GO_TO_DBBROWSER,
                         NULL, Icon_Audio);
+MENUITEM_RETURNVALUE(pictureflow_item, "CoverFlow", GO_TO_PICTUREFLOW,
+                        NULL, Icon_Playback_menu);
 #endif
 MENUITEM_RETURNVALUE(rocks_browser, ID2P(LANG_PLUGINS), GO_TO_BROWSEPLUGINS,
                         NULL, Icon_Plugin);
@@ -541,12 +565,12 @@ static struct menu_callback_with_desc root_menu_desc = {
         item_callback, ID2P(LANG_ROCKBOX_TITLE), Icon_Rockbox };
 
 static struct menu_table menu_table[] = {
-    /* iPod Classic 6G custom: concise menu, database first */
+    /* iPod Classic 6G custom: concise menu */
 #ifdef HAVE_TAGCACHE
+    { "pictureflow", &pictureflow_item },
     { "database", &db_browser },
 #endif
     { "wps", &wps_item },
-    { "playlists", &playlists },
     { "settings", &menu_ },
     { "system_menu", &system_menu_ },
 };

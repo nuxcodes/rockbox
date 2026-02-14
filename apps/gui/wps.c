@@ -842,10 +842,26 @@ long gui_wps_show(void)
             }
             break;
 
+            /* iPod Classic 6G custom: open PictureFlow instead of browser */
+            case ACTION_WPS_BROWSE:
+                {
+                    theme_enabled = false;
+                    gwps_leave_wps(false);
+                    filetype_load_plugin("pictureflow", NULL);
+                    if (!(audio_status() & AUDIO_STATUS_PLAY))
+                    {
+                        gwps_leave_wps(true);
+                        return GO_TO_WPS;
+                    }
+                    restore = true;
+                }
+                break;
+#if 0 /* original browse behavior */
             case ACTION_WPS_BROWSE:
                 gwps_leave_wps(true);
                 return GO_TO_PREVIOUS_BROWSER;
                 break;
+#endif
 
                 /* play/pause */
             case ACTION_WPS_PLAY:

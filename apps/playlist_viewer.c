@@ -51,6 +51,9 @@
 #include "menus/exported_menus.h"
 #include "yesno.h"
 #include "playback.h"
+#ifdef HAVE_TAGCACHE
+#include "tagcache.h"
+#endif
 
 /* Maximum number of tracks we can have loaded at one time                   */
 #define MAX_PLAYLIST_ENTRIES 200
@@ -179,10 +182,9 @@ static int playlist_entry_load(struct playlist_entry *entry, int index,
 
     len = strlcpy(name_buffer, info.filename, remaining_size) + 1;
 
-    if (global_settings.playlist_viewer_track_display >
-        PLAYLIST_VIEWER_ENTRY_SHOW_FULL_PATH && len <= remaining_size)
+    if (len <= remaining_size)
     {
-        /* Allocate space for the id3viewc if the option is enabled */
+        /* iPod Classic 6G custom: always allocate space for title display */
         len += MAX_PATH + 1;
     }
 
@@ -278,8 +280,15 @@ static bool retrieve_id3_tags(const int index, const char* name, struct mp3entry
     }
     else
     {
-    /* Read from disk, the database, doesn't store frequency, file size or codec (g4470) ChrisS*/
-        id3_retrieval_successful = get_metadata_ex(id3, -1, name, flags);
+#if defined(HAVE_TC_RAMCACHE) && defined(HAVE_DIRCACHE)
+        /* Try tagcache first (in-RAM, no disk spinup) */
+        id3_retrieval_successful = tagcache_fill_tags(id3, name);
+        if (!id3_retrieval_successful)
+#endif
+        {
+            /* Read from disk */
+            id3_retrieval_successful = get_metadata_ex(id3, -1, name, flags);
+        }
     }
     return id3_retrieval_successful;
 }
@@ -518,13 +527,9 @@ static void format_line(struct playlist_entry* track, char* str,
     char *skipped = "";
     if (track->attr & PLAYLIST_ATTR_SKIPPED)
         skipped = "(ERR) ";
-    if (!(track->attr & PLAYLIST_ATTR_RETRIEVE_ID3_ATTEMPTED) &&
-        (global_settings.playlist_viewer_track_display ==
-            PLAYLIST_VIEWER_ENTRY_SHOW_ID3_TITLE_AND_ALBUM ||
-        global_settings.playlist_viewer_track_display ==
-            PLAYLIST_VIEWER_ENTRY_SHOW_ID3_TITLE
-    ))
+    if (!(track->attr & PLAYLIST_ATTR_RETRIEVE_ID3_ATTEMPTED))
     {
+        /* iPod Classic 6G custom: always retrieve title from tags/db */
         track->attr |= PLAYLIST_ATTR_RETRIEVE_ID3_ATTEMPTED;
         bool retrieve_success = retrieve_id3_tags(track->index, track->name,
                                                   viewer.id3,
@@ -537,46 +542,11 @@ static void format_line(struct playlist_entry* track, char* str,
             }
             struct mp3entry * pid3 = viewer.id3;
             id3viewc[0] = '\0';
-            if (global_settings.playlist_viewer_track_display ==
-                PLAYLIST_VIEWER_ENTRY_SHOW_ID3_TITLE_AND_ALBUM)
+            /* Title only (matching PictureFlow behavior) */
+            if (pid3->title && pid3->title[0] != '\0' &&
+                strmemccpy(id3viewc, pid3->title, MAX_PATH))
             {
-                /* Title & Album */
-                if (pid3->title && pid3->title[0] != '\0')
-                {
-                    char* cur_str = id3viewc;
-                    int title_len = strlen(pid3->title);
-                    int rem_space = MAX_PATH;
-                    for (int i = 0; i < title_len && rem_space > 0; i++)
-                    {
-                        cur_str[0] = pid3->title[i];
-                        cur_str++;
-                        rem_space--;
-                    }
-                    if (rem_space > 10)
-                    {
-                        cur_str[0] = (char) ' ';
-                        cur_str[1] = (char) '-';
-                        cur_str[2] = (char) ' ';
-                        cur_str += 3;
-                        rem_space -= 3;
-                        cur_str = strmemccpy(cur_str, (pid3->album &&
-                                             pid3->album[0] != '\0') ? pid3->album :
-                                             (char*) str(LANG_TAGNAVI_UNTAGGED),
-                                             rem_space);
-                        if (cur_str)
-                            track->attr |= PLAYLIST_ATTR_RETRIEVE_ID3_SUCCEEDED;
-                    }
-                }
-            }
-            else if (global_settings.playlist_viewer_track_display ==
-                     PLAYLIST_VIEWER_ENTRY_SHOW_ID3_TITLE)
-            {
-                /* Just the title */
-                if (pid3->title && pid3->title[0] != '\0' &&
-                    strmemccpy(id3viewc, pid3->title, MAX_PATH))
-                {
-                    track->attr |= PLAYLIST_ATTR_RETRIEVE_ID3_SUCCEEDED;
-                }
+                track->attr |= PLAYLIST_ATTR_RETRIEVE_ID3_SUCCEEDED;
             }
             /* Yield to reduce as much as possible the perceived UI lag,
             because retrieving id3 tags is an expensive operation */

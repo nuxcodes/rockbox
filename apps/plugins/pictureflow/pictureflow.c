@@ -4427,7 +4427,9 @@ static void draw_album_text(void)
     if ((pf_cfg.show_album_name == ALBUM_AND_ARTIST_TOP)
         || (pf_cfg.show_album_name == ALBUM_AND_ARTIST_BOTTOM)){
 
-        if (album_idx != (int) pf_idx.album_untagged_idx)
+        /* iPod Classic 6G custom: compare seek (unique per album) instead
+           of name_idx (byte offset that can collide after sort/dedup) */
+        if (pf_idx.album_index[albumtxt_index].seek != pf_idx.album_untagged_seek)
             mylcd_putsxy(albumtxt_x, albumtxt_y, album_and_year);
 
         artisttxt = get_album_artist(albumtxt_index);
