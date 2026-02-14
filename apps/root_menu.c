@@ -541,24 +541,14 @@ static struct menu_callback_with_desc root_menu_desc = {
         item_callback, ID2P(LANG_ROCKBOX_TITLE), Icon_Rockbox };
 
 static struct menu_table menu_table[] = {
-    /* Order here represents the default ordering */
-    { "bookmarks", &bookmarks },
-    { "files", &file_browser },
+    /* iPod Classic 6G custom: concise menu, database first */
 #ifdef HAVE_TAGCACHE
     { "database", &db_browser },
 #endif
     { "wps", &wps_item },
-    { "settings", &menu_ },
-#ifdef HAVE_RECORDING
-    { "recording", &rec },
-#endif
-#if CONFIG_TUNER
-    { "radio", &fm },
-#endif
     { "playlists", &playlists },
-    { "plugins", &rocks_browser },
+    { "settings", &menu_ },
     { "system_menu", &system_menu_ },
-    { "shortcuts", &shortcut_menu },
 };
 #define MAX_MENU_ITEMS (sizeof(menu_table) / sizeof(struct menu_table))
 static struct menu_item_ex *root_menu__[MAX_MENU_ITEMS];

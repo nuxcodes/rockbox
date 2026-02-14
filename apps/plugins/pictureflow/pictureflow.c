@@ -1923,18 +1923,9 @@ static int pf_tcs_retrieve_track_title(int string_index, int disc_num, int track
     if (!track_buffer_avail(max_len))
         return 0;
 
-    if (track_num > 0)
-    {
-        if (disc_num > 0)
-            str_len = rb->snprintf(pf_tracks.names + string_index, max_len,
-                "%d.%02d: %s", disc_num, track_num, track_title);
-        else
-            str_len = rb->snprintf(pf_tracks.names + string_index, max_len,
-                "%d: %s", track_num, track_title);
-    }
-    else
-        str_len = rb->snprintf(pf_tracks.names + string_index, max_len,
-            "%s", track_title);
+    /* iPod Classic 6G custom: title only, no disc/track number prefix */
+    str_len = rb->snprintf(pf_tracks.names + string_index, max_len,
+        "%s", track_title);
     return str_len;
 }
 
@@ -4797,7 +4788,7 @@ static int pictureflow_main(void)
             else if (pf_state == pf_cover_out)
                 skip_animation_to_idle_state();
             else if (pf_state == pf_idle || pf_state == pf_scrolling)
-                return PLUGIN_OK;
+                return PLUGIN_GOTO_WPS;
             break;
         case PF_MENU:
 #ifdef USEGSLIB

@@ -6,9 +6,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Rockbox is an open-source replacement firmware for digital audio players (DAPs). Written in C (gnu99) with architecture-specific assembly, it supports 80+ hardware targets across ARM, MIPS, Coldfire (m68k), and hosted platforms (SDL/Android/Linux). Licensed under GPLv2.
 
+## Custom Build Target
+
+This tree is being tweaked as a custom build for the **iPod Classic 6th generation** (iPod 6G). Changes may diverge from upstream Rockbox to suit this specific target.
+
 ## Build Commands
 
 Rockbox requires out-of-tree builds. Cross-compiler toolchains are built via `tools/rockboxdev.sh`.
+
+**Environment note:** `brew` and `sudo` are not available in this session. If a build dependency is missing, ask the user to install it manually.
 
 ```bash
 # Build for a hardware target
