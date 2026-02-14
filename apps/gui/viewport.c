@@ -154,8 +154,11 @@ static void toggle_theme(enum screen_type screen, bool force)
             screens[screen].set_viewport(last_vp);
         }
         intptr_t force = first_boot?0:1;
-
+        skin_render_inhibit_flush(true);
         send_event(GUI_EVENT_ACTIONUPDATE, (void*)force);
+        skin_render_inhibit_flush(false);
+        if (!first_boot)
+            sb_skin_force_next_update();
     }
     else
     {

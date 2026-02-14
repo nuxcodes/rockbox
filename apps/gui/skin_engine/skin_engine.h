@@ -51,6 +51,9 @@ void skin_disarm_touchregions(struct gui_wps *gwps);
 void skin_update(enum skinnable_screens skin, enum screen_type screen,
                  unsigned int update_type);
 
+/* Inhibit display->update() in skin_render() while set */
+void skin_render_inhibit_flush(bool inhibit);
+
 bool skin_has_sbs(struct gui_wps *gwps);
 
 

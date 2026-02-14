@@ -89,6 +89,7 @@
 #endif /* !__PCTOOL__ */
 #include "bookmark.h"
 #include "wps.h"
+#include "gui/statusbar-skinned.h"
 #include "playback.h"
 #include "voice_thread.h"
 
@@ -1803,8 +1804,14 @@ static void push_current_activity_refresh(enum current_activity screen, bool ref
     {
         skinlist_set_cfg(i, NULL);
         if (refresh)
+        {
+            skin_render_inhibit_flush(true);
             skin_update(CUSTOM_STATUSBAR, i, SKIN_REFRESH_ALL);
+            skin_render_inhibit_flush(false);
+        }
     }
+    if (refresh)
+        sb_skin_force_next_update();
 }
 
 static void pop_current_activity_refresh(bool refresh)
@@ -1814,8 +1821,14 @@ static void pop_current_activity_refresh(bool refresh)
     {
         skinlist_set_cfg(i, NULL);
         if (refresh)
+        {
+            skin_render_inhibit_flush(true);
             skin_update(CUSTOM_STATUSBAR, i, SKIN_REFRESH_ALL);
+            skin_render_inhibit_flush(false);
+        }
     }
+    if (refresh)
+        sb_skin_force_next_update();
 }
 
 void push_current_activity(enum current_activity screen)

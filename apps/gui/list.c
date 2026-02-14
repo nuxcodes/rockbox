@@ -51,6 +51,14 @@ void list_draw(struct screen *display, struct gui_synclist *list);
 static long last_dirty_tick;
 static struct viewport parent[NB_SCREENS];
 static struct gui_synclist *current_lists;
+static bool need_full_update = false;
+
+bool list_need_full_update(void)
+{
+    bool ret = need_full_update;
+    need_full_update = false;
+    return ret;
+}
 
 static bool list_is_dirty(struct gui_synclist *list)
 {
@@ -231,6 +239,7 @@ void gui_synclist_draw(struct gui_synclist *gui_list)
         FOR_NB_SCREENS(i)
             list_init_item_height(gui_list, i);
         gui_synclist_select_item(gui_list, gui_list->selected_item);
+        need_full_update = true;
     }
     FOR_NB_SCREENS(i)
     {
@@ -439,7 +448,9 @@ void gui_synclist_set_title(struct gui_synclist * gui_list,
     gui_list->title_icon = icon;
     FOR_NB_SCREENS(i)
         sb_set_title_text(title, icon, i);
+    skin_render_inhibit_flush(true);
     send_event(GUI_EVENT_ACTIONUPDATE, (void*)1);
+    skin_render_inhibit_flush(false);
 }
 
 void gui_synclist_set_nb_items(struct gui_synclist * lists, int nb_items)

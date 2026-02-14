@@ -841,6 +841,13 @@ void skin_render_viewport(struct skin_element* viewport, struct gui_wps *gwps,
     wps_display_images(gwps, &skin_viewport->vp);
 }
 
+static bool inhibit_flush = false;
+
+void skin_render_inhibit_flush(bool inhibit)
+{
+    inhibit_flush = inhibit;
+}
+
 void skin_render(struct gui_wps *gwps, unsigned refresh_mode)
 {
     const int vp_is_appearing = (VP_DRAW_WASHIDDEN|VP_DRAW_HIDEABLE);
@@ -940,7 +947,8 @@ void skin_render(struct gui_wps *gwps, unsigned refresh_mode)
     }
     /* Restore the default viewport */
     display->set_viewport_ex(NULL, VP_FLAG_VP_SET_CLEAN);
-    display->update();
+    if (!inhibit_flush)
+        display->update();
 }
 
 static __attribute__((noinline))

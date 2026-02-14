@@ -282,7 +282,13 @@ bool skinlist_draw(struct screen *display, struct gui_synclist *list)
     current_column = -1;
     current_row = -1;
     display->set_viewport(parent);
-    display->update_viewport();
+    if (list_need_full_update())
+    {
+        display->set_viewport(NULL);
+        display->update();
+    }
+    else
+        display->update_viewport();
     current_drawing_line = list->selected_item;
     return true;
 }

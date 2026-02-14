@@ -215,6 +215,7 @@ extern int gui_synclist_get_nb_items(struct gui_synclist * lists);
 extern int  gui_synclist_get_sel_pos(struct gui_synclist * lists);
 
 extern void gui_synclist_draw(struct gui_synclist * lists);
+extern bool list_need_full_update(void);
 extern void gui_synclist_scroll_stop(struct gui_synclist *lists);
 extern void gui_synclist_select_item(struct gui_synclist * lists,
                                      int item_number);
