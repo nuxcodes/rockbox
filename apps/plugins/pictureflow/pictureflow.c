@@ -2974,7 +2974,8 @@ static void recalc_offsets(void)
     PFreal xs = PFREAL_HALF - DISPLAY_WIDTH * PFREAL_HALF;
     PFreal zo;
     PFreal xp = (DISPLAY_WIDTH * PFREAL_HALF - PFREAL_HALF +
-                pf_cfg.center_margin * PFREAL_ONE) * pf_cfg.zoom / 100;
+                pf_cfg.center_margin * PFREAL_ONE) * pf_cfg.zoom / 100
+                - DISPLAY_WIDTH * PFREAL_ONE / 4;
     PFreal cosr, sinr;
 
     itilt = 70 * IANGLE_MAX / 360;      /* approx. 70 degrees tilted */
