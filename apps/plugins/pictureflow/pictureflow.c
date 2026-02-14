@@ -562,6 +562,7 @@ static int fade;
 static int center_index = 0; /* index of the slide that is in the center */
 static int itilt;
 static PFreal offsetX;
+static PFreal auto_slide_spacing;
 static PFreal offsetY;
 static int number_of_slides;
 static bool is_initial_slide = true;
@@ -717,9 +718,9 @@ static void config_save(int cache_version, bool update_albumart)
 
 static void config_set_defaults(struct pf_config_t *cfg)
 {
-     cfg->slide_spacing = DISPLAY_WIDTH / 4;
-     cfg->center_margin = (LCD_WIDTH - DISPLAY_WIDTH) / 12;
-     cfg->num_slides = 4;
+     cfg->slide_spacing = DISPLAY_WIDTH / 4;  /* kept for config compat */
+     cfg->center_margin = 0;
+     cfg->num_slides = 4;   /* 3 visible + 1 animation buffer per side */
      cfg->zoom = 100;
      cfg->show_fps = false;
      cfg->auto_wps = 0;
@@ -2939,7 +2940,7 @@ static void reset_slides(void)
     for (i = 0; i < pf_cfg.num_slides; i++) {
         struct slide_data *si = &left_slides[i];
         si->angle = itilt;
-        si->cx = -(offsetX + pf_cfg.slide_spacing * i * PFREAL_ONE);
+        si->cx = -(offsetX + auto_slide_spacing * i);
         si->cy = offsetY;
         si->slide_index = center_index - 1 - i;
         si->distance = 0;
@@ -2948,7 +2949,7 @@ static void reset_slides(void)
     for (i = 0; i < pf_cfg.num_slides; i++) {
         struct slide_data *si = &right_slides[i];
         si->angle = -itilt;
-        si->cx = offsetX + pf_cfg.slide_spacing * i * PFREAL_ONE;
+        si->cx = offsetX + auto_slide_spacing * i;
         si->cy = offsetY;
         si->slide_index = center_index + 1 + i;
         si->distance = 0;
@@ -2985,6 +2986,33 @@ static void recalc_offsets(void)
         zo + fmuln(xs, sinr, PFREAL_SHIFT - 2, 0), PFREAL_SHIFT - 2, 0)
         / CAM_DIST;
     offsetY = DISPLAY_WIDTH / 2 * (fsin(itilt) + PFREAL_ONE / 2);
+
+    /* auto-compute side slide spacing for 3 visible slides per side.
+     *
+     * Each tilted side slide's visible area is the sliver peeking past
+     * the slide in front (painter's algorithm, nearest rendered last).
+     * That sliver width equals the gap between consecutive far edges.
+     *
+     * The far edge of a tilted right slide at world-space center cx has
+     * a projection denominator of CAM_DIST_R * 100 / zoom, making the
+     * far-edge screen position:
+     *     xp_far = (cx - fmul(xs, cosr)) * zoom / 100
+     *
+     * So for the last visible slide's far edge to reach the screen's
+     * right edge:
+     *     cx_last = (-DISPLAY_LEFT_R) * 100 / zoom + fmul(xs, cosr)
+     *
+     * We distribute 3 visible slides across 2 intervals from offsetX
+     * to cx_last.
+     */
+    {
+        PFreal cx_last = (-DISPLAY_LEFT_R) * 100 / pf_cfg.zoom
+                         + fmul(xs, cosr);
+        PFreal span = cx_last - offsetX;
+        if (span < PFREAL_ONE)
+            span = PFREAL_ONE;
+        auto_slide_spacing = span / 2;
+    }
 }
 
 /**
@@ -3490,8 +3518,8 @@ static void update_scroll_animation(void)
         struct slide_data *si = &left_slides[i];
         si->angle = itilt;
         si->cx =
-            -(offsetX + pf_cfg.slide_spacing * i * PFREAL_ONE + step
-                        * pf_cfg.slide_spacing * ftick);
+            -(offsetX + auto_slide_spacing * i + step
+                        * fmul(auto_slide_spacing, ftick));
         si->cy = offsetY;
     }
 
@@ -3499,8 +3527,8 @@ static void update_scroll_animation(void)
         struct slide_data *si = &right_slides[i];
         si->angle = -itilt;
         si->cx =
-            offsetX + pf_cfg.slide_spacing * i * PFREAL_ONE - step
-                      * pf_cfg.slide_spacing * ftick;
+            offsetX + auto_slide_spacing * i - step
+                      * fmul(auto_slide_spacing, ftick);
         si->cy = offsetY;
     }
 
@@ -3570,9 +3598,7 @@ static int display_settings_menu(void)
     MENUITEM_STRINGLIST(display_menu, ID2P(LANG_DISPLAY), NULL,
                         ID2P(LANG_BACKLIGHT),
                         ID2P(LANG_DISPLAY_FPS),
-                        ID2P(LANG_SPACING),
                         ID2P(LANG_CENTRE_MARGIN),
-                        ID2P(LANG_NUMBER_OF_SLIDES),
                         ID2P(LANG_ZOOM),
                         ID2P(LANG_RESIZE_COVERS));
 
@@ -3598,32 +3624,19 @@ static int display_settings_menu(void)
                     reset_track_list();
                 break;
             case 2:
-                old_val = pf_cfg.slide_spacing;
-                rb->set_int(rb->str(LANG_SPACING), "", 1,
-                            &pf_cfg.slide_spacing,
-                            NULL, 1, 0, 100, NULL );
-                adjust_album_display_for_setting(old_val, pf_cfg.slide_spacing);
-                break;
-            case 3:
                 old_val = pf_cfg.center_margin;
                 rb->set_int(rb->str(LANG_CENTRE_MARGIN), "", 1,
                             &pf_cfg.center_margin,
                             NULL, 1, 0, 80, NULL );
                 adjust_album_display_for_setting(old_val, pf_cfg.center_margin);
                 break;
-            case 4:
-                old_val = pf_cfg.num_slides;
-                rb->set_int(rb->str(LANG_NUMBER_OF_SLIDES), "", 1,
-                        &pf_cfg.num_slides, NULL, 1, 1, MAX_SLIDES_COUNT, NULL );
-                adjust_album_display_for_setting(old_val, pf_cfg.num_slides);
-                break;
-            case 5:
+            case 3:
                 old_val = pf_cfg.zoom;
                 rb->set_int(rb->str(LANG_ZOOM), "", 1, &pf_cfg.zoom,
                             NULL, 1, 10, 300, NULL );
                 adjust_album_display_for_setting(old_val, pf_cfg.zoom);
                 break;
-            case 6:
+            case 4:
                 old_val = pf_cfg.resize;
                 rb->set_bool(rb->str(LANG_RESIZE_COVERS), &pf_cfg.resize);
                 if (old_val == pf_cfg.resize) /* changed? */
@@ -4507,7 +4520,7 @@ static void draw_album_text(void)
         artisttxt = get_album_artist(albumtxt_index);
         set_scroll_line(artisttxt, PF_SCROLL_ARTIST);
         artisttxt_x = get_scroll_line_offset(PF_SCROLL_ARTIST);
-        int y_offset = char_height + char_height/2;
+        int y_offset = char_height;
         mylcd_putsxy(artisttxt_x, albumtxt_y + y_offset, artisttxt);
     } else {
         mylcd_putsxy(albumtxt_x, albumtxt_y, album_and_year);
