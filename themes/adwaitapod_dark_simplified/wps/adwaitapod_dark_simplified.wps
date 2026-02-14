@@ -101,7 +101,7 @@
 %?if(%St(volume display), =, graphic)<%?C<%xd(TLoverlay)%xd(TRoverlay)%xd(BLoverlay)%xd(BRoverlay)>>
 #
 %Vl(Player,215,148,60,30,-)
-%xd(PlayIcon,%mp,-1)
+%?mp<|%xd(PlayIcon,2)|%xd(PlayIcon,1)|%xd(PlayIcon,3)|%xd(PlayIcon,4)>
 #
 %Vl(Player,189,157,14,12,-)
 %?if(%pp, =, 1)<%xd(PlaylistPositionIcon,1)|%xd(PlaylistPositionIcon,2)>
@@ -156,7 +156,7 @@
 #
 #---Notification---#
 %Vl(Lockscreen,16,150,288,75,-)%xd(NotificationMusic)
-%Vl(Lockscreen,261,180,12,14,-)%?mp<|%xd(LockPlayIcon,1)|%xd(LockPlayIcon,2)|>
+%Vl(Lockscreen,261,180,12,14,-)%?mp<|%xd(LockPlayIcon,2)|%xd(LockPlayIcon,1)|>
 %Vl(Lockscreen,93,163,158,20,4)%s%al%?it<%it|%fn>
 %Vl(Lockscreen,93,183,158,22,3)
 %s%al%?it<%?if(%St(statusbar), =,off)<%t(6)%ia;%t(6)%id;%t(0)>%?if(%St(statusbar), =,top)<%id>%?if(%St(statusbar), =,bottom)<%ia>|%d(1)>

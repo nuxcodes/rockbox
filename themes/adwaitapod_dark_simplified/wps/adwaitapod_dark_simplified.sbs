@@ -199,7 +199,7 @@
 %Vl(MiniMusic,195,210,16,14,-)%xd(ShuffleIcon,%ps)
 %Vl(MiniMusic,293,210,17,16,-)%xd(RepeatIcon,%mm)
 %Vl(Miniplayer,222,202,60,30,-)
-%?mp<|%xd(MiniPlayIcon,1)|%xd(MiniPlayIcon,2)|||||%xd(MiniPlayIcon,1)|%xd(MiniPlayIcon,2)>
+%?mp<|%xd(MiniPlayIcon,2)|%xd(MiniPlayIcon,1)|||||%xd(MiniPlayIcon,2)|%xd(MiniPlayIcon,1)>
 #
 #------------ Lockscreen Layer ------------#
 %Vl(ScreenWipe,0,0,-,-,-)
@@ -220,7 +220,7 @@
 #
 %Vl(LockRadio,93,163,158,20,3)%al%s%?tm<%?tx<%ty|FM Radio>|%Tn>
 %Vl(LockRadio,93,183,158,22,4)%al%s%?tx<%tz|adwaitapod>
-%Vl(LockPlayer,261,180,12,14,-)%?mp<|%xd(LockPlayIcon,1)|%xd(LockPlayIcon,2)|||||%xd(LockPlayIcon,1)|%xd(LockPlayIcon,2)>
+%Vl(LockPlayer,261,180,12,14,-)%?mp<|%xd(LockPlayIcon,2)|%xd(LockPlayIcon,1)|||||%xd(LockPlayIcon,2)|%xd(LockPlayIcon,1)>
 #
 #---Low Battery Notification---#
 %Vl(LowPowerRefresh,16,150,288,75,-)

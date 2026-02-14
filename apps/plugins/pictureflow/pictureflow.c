@@ -230,6 +230,34 @@ typedef unsigned char pix_t;
 typedef fb_data pix_t;
 #endif  /* LCD_DEPTH >= 8 */
 
+#ifdef HAVE_LCD_COLOR
+static pix_t pf_bg_color;     /* theme background, replaces G_BRIGHT(0) */
+static pix_t pf_fg_color;     /* theme foreground, replaces G_BRIGHT(255) */
+static pix_t pf_lss_color;    /* selector start color for gradient */
+static pix_t pf_lse_color;    /* selector end color for gradient */
+static pix_t pf_lst_color;    /* selector text color */
+
+/* Pre-extracted RGB565 channel masks for fade_color() performance */
+static unsigned int pf_bg_rb;  /* pf_bg_color & 0xf81f */
+static unsigned int pf_bg_g;   /* pf_bg_color & 0x7e0 */
+
+/* Interpolate between pf_bg_color (brightness=0) and pf_fg_color (brightness=255) */
+static inline pix_t pf_color_mix(int brightness)
+{
+    int bg_r = RGB_UNPACK_RED(pf_bg_color);
+    int bg_g = RGB_UNPACK_GREEN(pf_bg_color);
+    int bg_b = RGB_UNPACK_BLUE(pf_bg_color);
+    int fg_r = RGB_UNPACK_RED(pf_fg_color);
+    int fg_g = RGB_UNPACK_GREEN(pf_fg_color);
+    int fg_b = RGB_UNPACK_BLUE(pf_fg_color);
+    return LCD_RGBPACK(
+        bg_r + (fg_r - bg_r) * brightness / 255,
+        bg_g + (fg_g - bg_g) * brightness / 255,
+        bg_b + (fg_b - bg_b) * brightness / 255
+    );
+}
+#endif
+
 /* for fixed-point arithmetic, we need minimum 32-bit long
    long long (64-bit) might be useful for multiplication and division */
 #define PFreal long
@@ -2101,8 +2129,13 @@ static void draw_splashscreen(unsigned char * buf_tmp, size_t buf_tmp_size)
     int ret = rb->read_bmp_file(SPLASH_BMP, &logo, buf_tmp_size,
                                 FORMAT_NATIVE, NULL);
 #if LCD_DEPTH > 1
+#ifdef HAVE_LCD_COLOR
+    rb->lcd_set_background(pf_bg_color);
+    rb->lcd_set_foreground(pf_fg_color);
+#else
     rb->lcd_set_background(N_BRIGHT(0));
     rb->lcd_set_foreground(N_BRIGHT(255));
+#endif
 #else
     rb->lcd_set_drawmode(PICTUREFLOW_DRMODE);
 #endif
@@ -2137,8 +2170,13 @@ static void draw_progressbar(int step, int count, char *msg)
     if (msg != NULL)
     {
 #if LCD_DEPTH > 1
+#ifdef HAVE_LCD_COLOR
+        rb->lcd_set_background(pf_bg_color);
+        rb->lcd_set_foreground(pf_fg_color);
+#else
         rb->lcd_set_background(N_BRIGHT(0));
         rb->lcd_set_foreground(N_BRIGHT(255));
+#endif
 #else
         rb->lcd_set_drawmode(PICTUREFLOW_DRMODE);
 #endif
@@ -2150,7 +2188,11 @@ static void draw_progressbar(int step, int count, char *msg)
         y += (txt_h + 5);
     }
 #if LCD_DEPTH > 1
+#ifdef HAVE_LCD_COLOR
+    rb->lcd_set_foreground(pf_color_mix(100));
+#else
     rb->lcd_set_foreground(N_BRIGHT(100));
+#endif
 #endif
     rb->lcd_drawrect(x, y, w+2, bar_height);
 #if LCD_DEPTH > 1
@@ -2159,7 +2201,11 @@ static void draw_progressbar(int step, int count, char *msg)
 
     rb->lcd_fillrect(x+1, y+1, step * w / count, bar_height-2);
 #if LCD_DEPTH > 1
+#ifdef HAVE_LCD_COLOR
+    rb->lcd_set_foreground(pf_fg_color);
+#else
     rb->lcd_set_foreground(N_BRIGHT(255));
+#endif
 #endif
     rb->lcd_update();
     rb->yield();
@@ -2942,8 +2988,8 @@ static void recalc_offsets(void)
 }
 
 /**
-   Fade the given color by spreading the fb_data
-   to an uint, multiply and compress the result back to a fb_data.
+   Fade the given color toward the theme background color.
+   a = 256 means fully opaque (original color), a = 0 means fully bg.
  */
 static inline pix_t fade_color(pix_t c, unsigned a)
 {
@@ -2951,25 +2997,29 @@ static inline pix_t fade_color(pix_t c, unsigned a)
     unsigned int result;
     c = swap16(c);
     a = (a + 2) & 0x1fc;
-    result = ((c & 0xf81f) * a) & 0xf81f00;
-    result |= ((c & 0x7e0) * a) & 0x7e000;
+    unsigned int inv_a = 0x100 - a;
+    result = (((c & 0xf81f) * a + pf_bg_rb * inv_a)) & 0xf81f00;
+    result |= (((c & 0x7e0) * a + pf_bg_g * inv_a)) & 0x7e000;
     result >>= 8;
     return swap16(result);
 
 #elif LCD_PIXELFORMAT == RGB565
     unsigned int result;
     a = (a + 2) & 0x1fc;
-    result = ((c & 0xf81f) * a) & 0xf81f00;
-    result |= ((c & 0x7e0) * a) & 0x7e000;
+    unsigned int inv_a = 0x100 - a;
+    result = (((c & 0xf81f) * a + pf_bg_rb * inv_a)) & 0xf81f00;
+    result |= (((c & 0x7e0) * a + pf_bg_g * inv_a)) & 0x7e000;
     result >>= 8;
     return result;
 
-#elif (LCD_PIXELFORMAT == RGB888 || LCD_PIXELFORMAT == XRGB8888) // FIXME: check this
+#elif (LCD_PIXELFORMAT == RGB888 || LCD_PIXELFORMAT == XRGB8888)
     unsigned int pixel = FB_UNPACK_SCALAR_LCD(c);
+    unsigned int bg = FB_UNPACK_SCALAR_LCD(pf_bg_color);
     unsigned int result;
     a = (a + 2) & 0x1fc;
-    result  = ((pixel & 0xff00ff) * a) & 0xff00ff00;
-    result |= ((pixel & 0x00ff00) * a) & 0x00ff0000;
+    unsigned int inv_a = 0x100 - a;
+    result  = (((pixel & 0xff00ff) * a + (bg & 0xff00ff) * inv_a)) & 0xff00ff00;
+    result |= (((pixel & 0x00ff00) * a + (bg & 0x00ff00) * inv_a)) & 0x00ff0000;
     result >>= 8;
     return FB_SCALARPACK(result);
 
@@ -3320,7 +3370,11 @@ static void show_next_slide(void)
 */
 static void render_all_slides(void)
 {
+#ifdef HAVE_LCD_COLOR
+    mylcd_set_background(pf_bg_color);
+#else
     mylcd_set_background(G_BRIGHT(0));
+#endif
     /* TODO: Optimizes this by e.g. invalidating rects */
     mylcd_clear_display();
 
@@ -3685,7 +3739,11 @@ static int main_menu(void)
     int result, curr_album, old_val;
 
 #if LCD_DEPTH > 1
+#ifdef HAVE_LCD_COLOR
+    rb->lcd_set_foreground(pf_fg_color);
+#else
     rb->lcd_set_foreground(N_BRIGHT(255));
+#endif
 #endif
 
     MENUITEM_STRINGLIST(main_menu, "PictureFlow", NULL,
@@ -3880,28 +3938,24 @@ static void reverse_animation(void)
 }
 
 /**
-   Draw a blue gradient at y with height h
+   Draw the selection highlight bar at y with height h
  */
 static inline void draw_gradient(int y, int h)
 {
+#ifdef HAVE_LCD_COLOR
+    mylcd_set_foreground(pf_lss_color);
+    mylcd_fillrect(0, y, LCD_WIDTH, h);
+#else
     int r, inc, c;
     inc = (100 << 8) / h;
     c = 0;
-    pf_tracks.sel_pulse = (pf_tracks.sel_pulse+1) % 10;
-    int c2 = pf_tracks.sel_pulse - 5;
-    for (r=0; r<h; r++) {
-#ifdef HAVE_LCD_COLOR
-        mylcd_set_foreground(G_PIX(c2+80-(c >> 9), c2+100-(c >> 9),
-                                           c2+250-(c >> 8)));
-#else
-        mylcd_set_foreground(G_BRIGHT(c2+160-(c >> 8)));
-#endif
-        mylcd_hline(0, LCD_WIDTH, r+y);
-        if ( r > h/2 )
-            c-=inc;
-        else
-            c+=inc;
+    for (r = 0; r < h; r++) {
+        int bright = (r > h/2) ? (h - r) : r;
+        bright = bright * 255 / (h/2);
+        mylcd_set_foreground(G_BRIGHT(160 * bright / 255));
+        mylcd_hline(0, LCD_WIDTH, r + y);
     }
+#endif
 }
 
 
@@ -3966,7 +4020,11 @@ static void draw_album_text(void);
 static void show_track_list_loading(void)
 {
     int x = (LCD_WIDTH - mylcd_getstringsize(rb->str(LANG_WAIT), NULL, NULL)) / 2;
+#ifdef HAVE_LCD_COLOR
+    mylcd_set_foreground(pf_fg_color);
+#else
     mylcd_set_foreground(G_BRIGHT(255));
+#endif
     int char_height = rb->screens[SCREEN_MAIN]->getcharheight();
     track_list_yh(char_height);
     mylcd_putsxy(x, pf_tracks.list_y + (pf_tracks.list_h  - char_height) / 2,
@@ -4014,15 +4072,23 @@ static bool show_track_list(void)
             }
             draw_gradient(titletxt_y, titletxt_h);
             titletxt_x = get_scroll_line_offset(PF_SCROLL_TRACK);
-            color = 255;
+#ifdef HAVE_LCD_COLOR
+            mylcd_set_foreground(pf_lst_color);
+#else
+            mylcd_set_foreground(G_BRIGHT(255));
+#endif
         }
         else {
             titletxt_w = mylcd_getstringsize(trackname, NULL, NULL);
             titletxt_x = (LCD_WIDTH-titletxt_w)/2;
             fade = (abs(pf_tracks.sel - track_i) * 200 / pf_tracks.count);
             color = 250 - fade;
+#ifdef HAVE_LCD_COLOR
+            mylcd_set_foreground(pf_color_mix(color));
+#else
+            mylcd_set_foreground(G_BRIGHT(color));
+#endif
         }
-        mylcd_set_foreground(G_BRIGHT(color));
         mylcd_putsxy(titletxt_x,titletxt_y,trackname);
         titletxt_y += titletxt_h;
     }
@@ -4242,8 +4308,8 @@ static void context_menu_cleanup(void)
 #ifdef USEGSLIB
     grey_show(true);
 #elif LCD_DEPTH > 1 && defined(HAVE_LCD_COLOR)
-    rb->lcd_set_background(N_BRIGHT(0));
-    rb->lcd_set_foreground(N_BRIGHT(255));
+    rb->lcd_set_background(pf_bg_color);
+    rb->lcd_set_foreground(pf_fg_color);
 #endif
     mylcd_set_drawmode(DRMODE_FG);
 }
@@ -4401,7 +4467,11 @@ static void draw_album_text(void)
     } else
         rb->snprintf(album_and_year, sizeof(album_and_year), "%s", albumtxt);
 
+#ifdef HAVE_LCD_COLOR
+    mylcd_set_foreground(pf_color_mix(c));
+#else
     mylcd_set_foreground(G_BRIGHT(c));
+#endif
     if (albumtxt_index != prev_albumtxt_index || pf_cfg.show_year != prev_show_year) {
         set_scroll_line(album_and_year, PF_SCROLL_ALBUM);
         prev_albumtxt_index = albumtxt_index;
@@ -4472,6 +4542,16 @@ static bool init(void)
 
     config_set_defaults(&pf_cfg); /* must appear before configfile_save */
     configfile_load(CONFIG_FILE, config, CONFIG_NUM_ITEMS, CONFIG_VERSION);
+
+#ifdef HAVE_LCD_COLOR
+    pf_bg_color = (pix_t)rb->global_settings->bg_color;
+    pf_fg_color = (pix_t)rb->global_settings->fg_color;
+    pf_lss_color = (pix_t)rb->global_settings->lss_color;
+    pf_lse_color = (pix_t)rb->global_settings->lse_color;
+    pf_lst_color = (pix_t)rb->global_settings->lst_color;
+    pf_bg_rb = pf_bg_color & 0xf81f;
+    pf_bg_g  = pf_bg_color & 0x7e0;
+#endif
 
     if(pf_cfg.backlight_mode == 0)
         backlight_ignore_timeout(); /* restore in cleanup */
@@ -4784,6 +4864,12 @@ static int pictureflow_main(void)
 
         switch (button) {
         case PF_QUIT:
+            if (pf_state == pf_show_tracks)
+            {
+                pf_state = pf_cover_out;
+                free_borrowed_tracks();
+                break;
+            }
             return PLUGIN_OK;
         case PF_WPS:
             return PLUGIN_GOTO_WPS;
@@ -4803,6 +4889,12 @@ static int pictureflow_main(void)
                 return PLUGIN_GOTO_WPS;
             break;
         case PF_MENU:
+            if (pf_state == pf_show_tracks)
+            {
+                pf_state = pf_cover_out;
+                free_borrowed_tracks();
+                break;
+            }
 #ifdef USEGSLIB
             grey_show(false);
 #endif
