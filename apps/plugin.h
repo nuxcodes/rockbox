@@ -178,7 +178,7 @@ int plugin_open(const char *plugin, const char *parameter);
  * when this happens please take the opportunity to sort in
  * any new functions "waiting" at the end of the list.
  */
-#define PLUGIN_API_VERSION 278
+#define PLUGIN_API_VERSION 279
 
 /* 239 Marks the removal of ARCHOS HWCODEC and CHARCELL */
 
@@ -424,6 +424,7 @@ struct plugin_api {
     bool (*sb_set_title_text)(const char* title, enum themable_icons icon, enum screen_type screen);
     bool (*sb_set_persistent_title)(const char* title, enum themable_icons icon,
                                     enum screen_type screen);
+    void (*skin_render_inhibit_flush)(bool inhibit);
 
     /* action handling */
     int (*get_custom_action)(int context,int timeout,

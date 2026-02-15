@@ -361,6 +361,7 @@ static const struct plugin_api rockbox_api = {
     /* status bar */
     sb_set_title_text,
     sb_set_persistent_title,
+    skin_render_inhibit_flush,
 
     /* action handling */
     get_custom_action,

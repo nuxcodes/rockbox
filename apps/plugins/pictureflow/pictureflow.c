@@ -2997,7 +2997,7 @@ static void recalc_offsets(void)
                 - pf_cfg.slide_tuck * PFREAL_ONE;
     PFreal cosr, sinr;
 
-    itilt = 70 * IANGLE_MAX / 360;      /* approx. 70 degrees tilted */
+    itilt = (pf_cfg.parallel_slides ? 55 : 70) * IANGLE_MAX / 360;
     cosr = fcos(-itilt);
     sinr = fsin(-itilt);
     zo = CAM_DIST_R * 100 / pf_cfg.zoom - CAM_DIST_R +
@@ -3008,26 +3008,29 @@ static void recalc_offsets(void)
     offsetY = DISPLAY_WIDTH / 2 * (fsin(itilt) + PFREAL_ONE / 2);
 
     /* auto-compute side slide spacing for 3 visible slides per side.
-     *
-     * Each tilted side slide's visible area is the sliver peeking past
-     * the slide in front (painter's algorithm, nearest rendered last).
-     * That sliver width equals the gap between consecutive far edges.
-     *
-     * The far edge of a tilted right slide at world-space center cx has
-     * a projection denominator of CAM_DIST_R * 100 / zoom, making the
-     * far-edge screen position:
-     *     xp_far = (cx - fmul(xs, cosr)) * zoom / 100
-     *
-     * So for the last visible slide's far edge to reach the screen's
-     * right edge:
-     *     cx_last = (-DISPLAY_LEFT_R) * 100 / zoom + fmul(xs, cosr)
-     *
      * We distribute 3 visible slides across 2 intervals from offsetX
-     * to cx_last.
+     * to cx_last (the world-space cx where the last slide's far edge
+     * reaches the screen border).
      */
     {
-        PFreal cx_last = (-DISPLAY_LEFT_R) * 100 / pf_cfg.zoom
-                         + fmul(xs, cosr);
+        PFreal cx_last;
+        if (pf_cfg.parallel_slides) {
+            /* In parallel mode, each slide is rendered at cx=0 then
+             * shifted by screen_cx = CAM_DIST*cx/(CAM_DIST_R+zo).
+             * Find the canonical far-edge position (right bitmap edge
+             * of a right slide rendered at cx=0), then invert the
+             * shift to find the cx that reaches the screen border. */
+            PFreal edge_r = fdiv(CAM_DIST * fmul(-xs, cosr),
+                CAM_DIST_R + zo + fmul(-xs, sinr));
+            PFreal target = -DISPLAY_LEFT_R - edge_r;
+            /* Invert: cx = target * (CAM_DIST_R+zo) / CAM_DIST_R
+             *            = target + target * zo / CAM_DIST_R */
+            cx_last = target
+                + fmuln(target, zo, PFREAL_SHIFT - 2, 0) / CAM_DIST;
+        } else {
+            cx_last = (-DISPLAY_LEFT_R) * 100 / pf_cfg.zoom
+                             + fmul(xs, cosr);
+        }
         PFreal span = cx_last - offsetX;
         if (span < PFREAL_ONE)
             span = PFREAL_ONE;
@@ -4438,6 +4441,7 @@ static void context_menu_cleanup(void)
 {
     FOR_NB_SCREENS(i)
         rb->viewportmanager_theme_undo(i, false);
+    rb->sb_set_persistent_title("Cover Flow", Icon_NOICON, SCREEN_MAIN);
     rb->lcd_set_viewport(&pf_vp);
     if (pf_state != pf_show_tracks)
         free_borrowed_tracks();
@@ -4930,14 +4934,17 @@ static int pictureflow_main(void)
 
     while (true) {
         /* Get input first. The SBS renders during get_custom_action() and
-         * calls lcd_update(), pushing its full-screen content (including
-         * decorative viewports and list items that overlap PF's area) to
-         * the display. By processing input BEFORE rendering, PF's render
-         * overwrites any SBS content in the framebuffer, and PF's
-         * lcd_update() is always the last thing on the display. */
+         * writes into the framebuffer (including decorative viewports that
+         * overlap PF's area). Inhibit the SBS's lcd_update() so it doesn't
+         * push that content to the display — PF's own lcd_update() after
+         * rendering will push both the SBS status bar and PF content
+         * atomically, avoiding one-frame flicker of theme artifacts. */
         instant_update = (pf_state == pf_scrolling ||
                           pf_state == pf_cover_in ||
                           pf_state == pf_cover_out);
+
+        if (pf_cfg.show_statusbar)
+            rb->skin_render_inhibit_flush(true);
 
         button = rb->get_custom_action(CONTEXT_PLUGIN
 #ifndef USE_CORE_PREVNEXT
@@ -4945,6 +4952,9 @@ static int pictureflow_main(void)
 #endif
             ,instant_update ? 0 : HZ/16,
             get_context_map);
+
+        if (pf_cfg.show_statusbar)
+            rb->skin_render_inhibit_flush(false);
 
         /* SBS rendering in get_custom_action resets the viewport to default.
          * Restore ours so LCD API calls use the correct coordinates. */
@@ -5072,6 +5082,7 @@ static int pictureflow_main(void)
             ret = main_menu();
             FOR_NB_SCREENS(i)
                 rb->viewportmanager_theme_undo(i, false);
+            rb->sb_set_persistent_title("Cover Flow", Icon_NOICON, SCREEN_MAIN);
             rb->lcd_set_viewport(&pf_vp);
 
             if (ret == -3)
@@ -5085,6 +5096,7 @@ static int pictureflow_main(void)
                 FOR_NB_SCREENS(i)
                     rb->viewportmanager_theme_enable(i,
                         pf_cfg.show_statusbar, NULL);
+                rb->sb_set_persistent_title("Cover Flow", Icon_NOICON, SCREEN_MAIN);
                 rb->lcd_set_viewport(&pf_vp);
 #ifdef HAVE_LCD_COLOR
                 mylcd_set_background(pf_bg_color);
