@@ -334,6 +334,7 @@ struct pf_config_t
      int sort_albums_by;
      int year_sort_order;
      bool show_year;
+     bool parallel_slides;
 
      bool resize;
      bool show_fps;
@@ -546,6 +547,8 @@ static struct configdata config[] =
     { TYPE_ENUM, 0, 2, { .int_p = &pf_cfg.year_sort_order }, "year order",
       year_sort_order_conf },
     { TYPE_BOOL, 0, 1, { .bool_p = &pf_cfg.show_year }, "show year", NULL },
+    { TYPE_BOOL, 0, 1, { .bool_p = &pf_cfg.parallel_slides }, "parallel slides",
+      NULL },
     { TYPE_BOOL, 0, 1, { .bool_p = &pf_cfg.update_albumart }, "update albumart", NULL }
 };
 
@@ -744,6 +747,7 @@ static void config_set_defaults(struct pf_config_t *cfg)
      cfg->sort_albums_by = SORT_BY_ARTIST_AND_NAME;
      cfg->year_sort_order = ASCENDING;
      cfg->show_year = false;
+     cfg->parallel_slides = true;
      cfg->update_albumart = false;
 }
 
@@ -3678,6 +3682,7 @@ static int display_settings_menu(void)
                         ID2P(LANG_CENTRE_MARGIN),
                         ID2P(LANG_NUMBER_OF_SLIDES),
                         ID2P(LANG_ZOOM),
+                        ID2P(LANG_SPACING),
                         ID2P(LANG_RESIZE_COVERS));
 
     static const struct opt_items backlight_options[] = {
@@ -3722,6 +3727,12 @@ static int display_settings_menu(void)
                 adjust_album_display_for_setting(old_val, pf_cfg.zoom);
                 break;
             case 5:
+                old_val = pf_cfg.parallel_slides;
+                rb->set_bool(rb->str(LANG_SPACING), &pf_cfg.parallel_slides);
+                adjust_album_display_for_setting(old_val,
+                                                 pf_cfg.parallel_slides);
+                break;
+            case 6:
                 old_val = pf_cfg.resize;
                 rb->set_bool(rb->str(LANG_RESIZE_COVERS), &pf_cfg.resize);
                 if (old_val == pf_cfg.resize) /* changed? */
@@ -4584,7 +4595,7 @@ static void draw_album_text(void)
             break;
         case ALBUM_NAME_BOTTOM:
         case ALBUM_AND_ARTIST_BOTTOM:
-            albumtxt_y = (pf_height - (char_height * 5 / 2));
+            albumtxt_y = (pf_height - (char_height * 9 / 4));
             break;
         case ALBUM_NAME_TOP:
         default:
@@ -4606,7 +4617,7 @@ static void draw_album_text(void)
         artisttxt = get_album_artist(albumtxt_index);
         set_scroll_line(artisttxt, PF_SCROLL_ARTIST);
         artisttxt_x = get_scroll_line_offset(PF_SCROLL_ARTIST);
-        int y_offset = char_height;
+        int y_offset = char_height * 3 / 4;
         mylcd_putsxy(artisttxt_x, albumtxt_y + y_offset, artisttxt);
     } else {
         mylcd_putsxy(albumtxt_x, albumtxt_y, album_and_year);
@@ -5181,6 +5192,13 @@ enum plugin_status plugin_start(const void *parameter)
         rb->viewportmanager_theme_enable(i, true, NULL);
     rb->viewport_set_defaults(&pf_vp, SCREEN_MAIN);
     pf_vp.buffer = NULL; /* ensure LCD API uses the default framebuffer */
+    /* Force full-width viewport: render_slide() writes across all LCD_WIDTH
+     * columns via direct buffer access, so the viewport must match to ensure
+     * clear_viewport() clears the same area. Some themes define a narrower
+     * info viewport (e.g. x=4, width=316) which would leave edge columns
+     * uncleared, causing artifacts. */
+    pf_vp.x = 0;
+    pf_vp.width = LCD_WIDTH;
     FOR_NB_SCREENS(i)
         rb->viewportmanager_theme_undo(i, false);
 
@@ -5191,7 +5209,7 @@ enum plugin_status plugin_start(const void *parameter)
      * use the original compile-time values. */
     pf_vp_y = pf_vp.y;
     pf_height = pf_vp.height;
-    pf_half_height = LCD_HEIGHT / 2 - pf_vp_y;
+    pf_half_height = LCD_HEIGHT / 2 - pf_vp_y + 8;
     pf_lower_half = pf_height - pf_half_height;
     pf_reflect_height = REFLECT_HEIGHT;
     pf_display_offs = DISPLAY_OFFS;

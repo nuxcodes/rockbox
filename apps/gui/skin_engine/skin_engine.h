@@ -53,6 +53,8 @@ void skin_update(enum skinnable_screens skin, enum screen_type screen,
 
 /* Inhibit display->update() in skin_render() while set */
 void skin_render_inhibit_flush(bool inhibit);
+/* Returns true (and auto-resets) if a skin render flush was inhibited */
+bool skin_render_pending_update(void);
 
 bool skin_has_sbs(struct gui_wps *gwps);
 

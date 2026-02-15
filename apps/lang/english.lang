@@ -14568,13 +14568,13 @@
   desc: in the pictureflow settings menu
   user: core
   <source>
-    *: "Spacing"
+    *: "Parallel Slides"
   </source>
   <dest>
-    *: "Spacing"
+    *: "Parallel Slides"
   </dest>
   <voice>
-    *: "Spacing"
+    *: "Parallel Slides"
   </voice>
 </phrase>
 <phrase>

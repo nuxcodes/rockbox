@@ -842,10 +842,18 @@ void skin_render_viewport(struct skin_element* viewport, struct gui_wps *gwps,
 }
 
 static bool inhibit_flush = false;
+static bool pending_full_update = false;
 
 void skin_render_inhibit_flush(bool inhibit)
 {
     inhibit_flush = inhibit;
+}
+
+bool skin_render_pending_update(void)
+{
+    bool ret = pending_full_update;
+    pending_full_update = false;
+    return ret;
 }
 
 void skin_render(struct gui_wps *gwps, unsigned refresh_mode)
@@ -949,6 +957,8 @@ void skin_render(struct gui_wps *gwps, unsigned refresh_mode)
     display->set_viewport_ex(NULL, VP_FLAG_VP_SET_CLEAN);
     if (!inhibit_flush)
         display->update();
+    else
+        pending_full_update = true;
 }
 
 static __attribute__((noinline))

@@ -447,10 +447,11 @@ void list_draw(struct screen *display, struct gui_synclist *list)
         callback_draw_item(&list_info);
     }
     display->set_viewport(parent);
-    if (list_need_full_update())
+    if (list_need_full_update() | skin_render_pending_update())
     {
         display->set_viewport(NULL);
         display->update();
+        sb_skin_force_next_update();
     }
     else
         display->update_viewport();

@@ -1021,8 +1021,11 @@ int plugin_load(const char* plugin, const void* parameter)
     pop_current_activity_without_refresh();
     if (get_current_activity() != ACTIVITY_WPS)
     {
+        skin_render_inhibit_flush(true);
         FOR_NB_SCREENS(i)
                 skin_update(CUSTOM_STATUSBAR, i, SKIN_REFRESH_ALL);
+        skin_render_inhibit_flush(false);
+        sb_skin_force_next_update();
     }
 
     if (!pfn_tsr_exit)
