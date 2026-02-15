@@ -341,6 +341,9 @@ struct pf_config_t
      bool show_statusbar;
 
      bool update_albumart;
+
+     int scroll_speed;
+     int transition_speed;
 };
 
 struct pf_index_t {
@@ -551,7 +554,10 @@ static struct configdata config[] =
     { TYPE_BOOL, 0, 1, { .bool_p = &pf_cfg.parallel_slides }, "parallel slides",
       NULL },
     { TYPE_BOOL, 0, 1, { .bool_p = &pf_cfg.show_statusbar }, "show statusbar", NULL },
-    { TYPE_BOOL, 0, 1, { .bool_p = &pf_cfg.update_albumart }, "update albumart", NULL }
+    { TYPE_BOOL, 0, 1, { .bool_p = &pf_cfg.update_albumart }, "update albumart", NULL },
+    { TYPE_INT, 100, 400, { .int_p = &pf_cfg.scroll_speed }, "scroll speed", NULL },
+    { TYPE_INT, 100, 400, { .int_p = &pf_cfg.transition_speed }, "transition speed",
+      NULL }
 };
 
 #define CONFIG_NUM_ITEMS (sizeof(config) / sizeof(struct configdata))
@@ -753,6 +759,8 @@ static void config_set_defaults(struct pf_config_t *cfg)
      cfg->parallel_slides = true;
      cfg->show_statusbar = true;
      cfg->update_albumart = false;
+     cfg->scroll_speed = 200;
+     cfg->transition_speed = 200;
 }
 
 static inline PFreal fmul(PFreal a, PFreal b)
@@ -3568,7 +3576,9 @@ static void update_scroll_animation(void)
         fi = fmin(fi, max);
 
         int ia = IANGLE_MAX * (fi - max / 2) / (max * 2);
-        speed = 512 + 16384 * (PFREAL_ONE + fsin(ia)) / PFREAL_ONE;
+        int accel = 16384 * (PFREAL_ONE + fsin(ia)) / PFREAL_ONE;
+        speed = 512 * pf_cfg.transition_speed / 100
+              + accel * pf_cfg.scroll_speed / 100;
     }
 
     slide_frame += speed * step;
@@ -3628,17 +3638,12 @@ static void update_scroll_animation(void)
 
     if (step > 0) {
         PFreal ftick = (neg * PFREAL_ONE) >> 16;
-        /* Stay fully tilted for the first 75%, un-tilt in the last 25%.
-         * This prevents the face-on content from overlapping the center
-         * slide during the tuck overlap zone. */
-        int tilt_neg = (neg > 16384) ? 65536 : neg * 4;
-        right_slides[0].angle = -(tilt_neg * itilt) >> 16;
+        right_slides[0].angle = -(neg * itilt) >> 16;
         right_slides[0].cx = fmul(offsetX, ftick);
         right_slides[0].cy = fmul(offsetY, ftick);
     } else {
         PFreal ftick = (pos * PFREAL_ONE) >> 16;
-        int tilt_pos = (pos > 16384) ? 65536 : pos * 4;
-        left_slides[0].angle = (tilt_pos * itilt) >> 16;
+        left_slides[0].angle = (pos * itilt) >> 16;
         left_slides[0].cx = -fmul(offsetX, ftick);
         left_slides[0].cy = fmul(offsetY, ftick);
     }
@@ -3702,7 +3707,9 @@ static int display_settings_menu(void)
                         ID2P(LANG_ZOOM),
                         ID2P(LANG_SPACING),
                         ID2P(LANG_RESIZE_COVERS),
-                        "Show Statusbar");
+                        "Show Statusbar",
+                        "Scroll Speed %",
+                        "Transition Speed %");
 
     static const struct opt_items backlight_options[] = {
         { STR(LANG_ALWAYS_ON) },
@@ -3777,6 +3784,16 @@ static int display_settings_menu(void)
                                     CONFIG_NUM_ITEMS, CONFIG_VERSION);
                     return -3; /* re-init to recompute layout */
                 }
+                break;
+            case 8:
+                rb->set_int("Scroll Speed %", "", 1,
+                            &pf_cfg.scroll_speed,
+                            NULL, 25, 100, 400, NULL );
+                break;
+            case 9:
+                rb->set_int("Transition Speed %", "", 1,
+                            &pf_cfg.transition_speed,
+                            NULL, 25, 100, 400, NULL );
                 break;
             case MENU_ATTACHED_USB:
                 return PLUGIN_USB_CONNECTED;
@@ -4974,14 +4991,6 @@ static int pictureflow_main(void)
             case pf_cover_in:
                 update_cover_in_animation();
                 render_all_slides();
-                /* iPod 6G: preload track index during rotate phase so
-                   track list appears instantly when animation finishes */
-                if (cover_animation_keyframe == ZOOMIN_FRAME_COUNT + 1 &&
-                    center_slide.slide_index != pf_tracks.cur_idx)
-                {
-                    create_track_index(center_slide.slide_index);
-                    reset_track_list();
-                }
                 break;
             case pf_cover_out:
                 show_tracks_while_browsing = false;
