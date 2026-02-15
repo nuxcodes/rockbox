@@ -338,6 +338,7 @@ struct pf_config_t
 
      bool resize;
      bool show_fps;
+     bool show_statusbar;
 
      bool update_albumart;
 };
@@ -549,6 +550,7 @@ static struct configdata config[] =
     { TYPE_BOOL, 0, 1, { .bool_p = &pf_cfg.show_year }, "show year", NULL },
     { TYPE_BOOL, 0, 1, { .bool_p = &pf_cfg.parallel_slides }, "parallel slides",
       NULL },
+    { TYPE_BOOL, 0, 1, { .bool_p = &pf_cfg.show_statusbar }, "show statusbar", NULL },
     { TYPE_BOOL, 0, 1, { .bool_p = &pf_cfg.update_albumart }, "update albumart", NULL }
 };
 
@@ -565,6 +567,7 @@ static int pf_reflect_height;   /* pf_height - DISPLAY_HEIGHT */
 static int pf_display_offs;     /* pf_half_height - pf_reflect_height */
 static int pf_vp_y;             /* viewport y-offset (status bar height) */
 static struct viewport pf_vp;   /* PF rendering viewport (below status bar) */
+static struct frame_buffer_t pf_framebuffer; /* bypass backdrop in clear_viewport */
 static struct slide_data center_slide;
 static struct slide_data left_slides[MAX_SLIDES_COUNT];
 static struct slide_data right_slides[MAX_SLIDES_COUNT];
@@ -748,6 +751,7 @@ static void config_set_defaults(struct pf_config_t *cfg)
      cfg->year_sort_order = ASCENDING;
      cfg->show_year = false;
      cfg->parallel_slides = true;
+     cfg->show_statusbar = true;
      cfg->update_albumart = false;
 }
 
@@ -3136,21 +3140,31 @@ static void render_slide(struct slide_data *slide, const int alpha)
     PFreal sinr = fsin(slide->angle);
     PFreal zo = PFREAL_ONE * slide->distance + CAM_DIST_R * 100 / pf_cfg.zoom
         - CAM_DIST_R - fmuln(MAXSLIDE_LEFT_R, fabs(sinr), PFREAL_SHIFT - 2, 0);
+
+    /* For parallel rendering, project the slide as if cx=0 (canonical tilt),
+     * then shift horizontally to the true screen position. */
+    PFreal screen_cx = (pf_cfg.parallel_slides && slide->angle != 0)
+        ? fdiv(CAM_DIST * slide->cx, CAM_DIST_R + zo) : 0;
+    PFreal render_cx = (screen_cx != 0) ? 0 : slide->cx;
+
     PFreal xs = slide_left, xsnum, xsnumi, xsden, xsdeni;
-    PFreal xp = fdiv(CAM_DIST * (slide->cx + fmul(xs, cosr)),
+    PFreal xp = fdiv(CAM_DIST * (render_cx + fmul(xs, cosr)),
         (CAM_DIST_R + zo + fmul(xs,sinr)));
 
     /* Since we're finding the screen position of the left edge of the slide,
      * we round up.
      */
+    xp += screen_cx;
     int xi = (fmax(DISPLAY_LEFT_R, xp) - DISPLAY_LEFT_R + PFREAL_ONE - 1)
         >> PFREAL_SHIFT;
     xp = DISPLAY_LEFT_R + xi * PFREAL_ONE;
     if (xi >= w) {
         return;
     }
-    xsnum = CAM_DIST * (slide->cx - xp) - fmuln(xp, zo, PFREAL_SHIFT - 2, 0);
-    xsden = fmuln(xp, sinr, PFREAL_SHIFT - 2, 0) - CAM_DIST * cosr;
+    PFreal xp_local = xp - screen_cx;
+    xsnum = CAM_DIST * (render_cx - xp_local)
+        - fmuln(xp_local, zo, PFREAL_SHIFT - 2, 0);
+    xsden = fmuln(xp_local, sinr, PFREAL_SHIFT - 2, 0) - CAM_DIST * cosr;
     xs = fdiv(xsnum, xsden);
 
     xsnumi = -CAM_DIST_R - zo;
@@ -3169,8 +3183,9 @@ static void render_slide(struct slide_data *slide, const int alpha)
         int column = (unsigned)(xs - slide_left) >> PFREAL_SHIFT;
         if (column >= sw)
             break;
-        if (perspective)
+        if (perspective) {
             dy = (CAM_DIST_R + zo + fmul(xs, sinr)) / CAM_DIST;
+        }
 
         const pix_t *ptr = &src[column * sh];
 
@@ -3683,7 +3698,8 @@ static int display_settings_menu(void)
                         ID2P(LANG_NUMBER_OF_SLIDES),
                         ID2P(LANG_ZOOM),
                         ID2P(LANG_SPACING),
-                        ID2P(LANG_RESIZE_COVERS));
+                        ID2P(LANG_RESIZE_COVERS),
+                        "Show Statusbar");
 
     static const struct opt_items backlight_options[] = {
         { STR(LANG_ALWAYS_ON) },
@@ -3749,6 +3765,16 @@ static int display_settings_menu(void)
                 configfile_save(CONFIG_FILE, config,
                                 CONFIG_NUM_ITEMS, CONFIG_VERSION);
                 return -3; /* re-init */
+            case 7:
+                old_val = pf_cfg.show_statusbar;
+                rb->set_bool("Show Statusbar", &pf_cfg.show_statusbar);
+                if (old_val != pf_cfg.show_statusbar)
+                {
+                    configfile_save(CONFIG_FILE, config,
+                                    CONFIG_NUM_ITEMS, CONFIG_VERSION);
+                    return -3; /* re-init to recompute layout */
+                }
+                break;
             case MENU_ATTACHED_USB:
                 return PLUGIN_USB_CONNECTED;
         }
@@ -4595,7 +4621,9 @@ static void draw_album_text(void)
             break;
         case ALBUM_NAME_BOTTOM:
         case ALBUM_AND_ARTIST_BOTTOM:
-            albumtxt_y = (pf_height - (char_height * 9 / 4));
+            albumtxt_y = pf_cfg.show_statusbar
+                ? (pf_height - (char_height * 9 / 4))
+                : (pf_height - (char_height * 5 / 2));
             break;
         case ALBUM_NAME_TOP:
         default:
@@ -4652,6 +4680,30 @@ static bool init(void)
 
     config_set_defaults(&pf_cfg); /* must appear before configfile_save */
     configfile_load(CONFIG_FILE, config, CONFIG_NUM_ITEMS, CONFIG_VERSION);
+
+    /* Compute viewport and rendering layout based on show_statusbar setting */
+    if (pf_cfg.show_statusbar)
+    {
+        FOR_NB_SCREENS(i)
+            rb->viewportmanager_theme_enable(i, true, NULL);
+        rb->viewport_set_defaults(&pf_vp, SCREEN_MAIN);
+        FOR_NB_SCREENS(i)
+            rb->viewportmanager_theme_undo(i, false);
+    }
+    else
+    {
+        rb->viewport_set_fullscreen(&pf_vp, SCREEN_MAIN);
+    }
+    pf_vp.buffer = &pf_framebuffer;
+    pf_vp.x = 0;
+    pf_vp.width = LCD_WIDTH;
+
+    pf_vp_y = pf_cfg.show_statusbar ? pf_vp.y : 0;
+    pf_height = pf_cfg.show_statusbar ? pf_vp.height : LCD_HEIGHT;
+    pf_half_height = LCD_HEIGHT / 2 - pf_vp_y + (pf_cfg.show_statusbar ? 8 : 0);
+    pf_lower_half = pf_height - pf_half_height;
+    pf_reflect_height = REFLECT_HEIGHT;
+    pf_display_offs = DISPLAY_OFFS;
 
 #ifdef HAVE_LCD_COLOR
     pf_bg_color = (pix_t)rb->global_settings->bg_color;
@@ -4877,11 +4929,29 @@ static int pictureflow_main(void)
     bool instant_update;
 
     while (true) {
+        /* Get input first. The SBS renders during get_custom_action() and
+         * calls lcd_update(), pushing its full-screen content (including
+         * decorative viewports and list items that overlap PF's area) to
+         * the display. By processing input BEFORE rendering, PF's render
+         * overwrites any SBS content in the framebuffer, and PF's
+         * lcd_update() is always the last thing on the display. */
+        instant_update = (pf_state == pf_scrolling ||
+                          pf_state == pf_cover_in ||
+                          pf_state == pf_cover_out);
+
+        button = rb->get_custom_action(CONTEXT_PLUGIN
+#ifndef USE_CORE_PREVNEXT
+            |(pf_state == pf_show_tracks ? 1 : 0)
+#endif
+            ,instant_update ? 0 : HZ/16,
+            get_context_map);
+
+        /* SBS rendering in get_custom_action resets the viewport to default.
+         * Restore ours so LCD API calls use the correct coordinates. */
+        rb->lcd_set_viewport(&pf_vp);
+
         current_update = *rb->current_tick;
         frames++;
-
-        /* Initial rendering */
-        instant_update = false;
 
         update_scroll_lines();
 
@@ -4890,7 +4960,6 @@ static int pictureflow_main(void)
             case pf_scrolling:
                 update_scroll_animation();
                 render_all_slides();
-                instant_update = true;
                 break;
             case pf_cover_in:
                 update_cover_in_animation();
@@ -4903,13 +4972,11 @@ static int pictureflow_main(void)
                     create_track_index(center_slide.slide_index);
                     reset_track_list();
                 }
-                instant_update = true;
                 break;
             case pf_cover_out:
                 show_tracks_while_browsing = false;
                 update_cover_out_animation();
                 render_all_slides();
-                instant_update = true;
                 break;
             case pf_show_tracks:
                 if (!show_track_list() && !prompt_reinit())
@@ -4961,21 +5028,8 @@ static int pictureflow_main(void)
 
 
         /* Copy offscreen buffer to LCD and give time to other threads */
-        if (is_initial_slide == false)
-            mylcd_update();
+        mylcd_update();
         rb->yield();
-
-        /*/ Handle buttons */
-        button = rb->get_custom_action(CONTEXT_PLUGIN
-#ifndef USE_CORE_PREVNEXT
-            |(pf_state == pf_show_tracks ? 1 : 0)
-#endif
-            ,instant_update ? 0 : HZ/16,
-            get_context_map);
-
-        /* SBS rendering in get_custom_action resets the viewport to default.
-         * Restore ours so LCD API calls use the correct coordinates. */
-        rb->lcd_set_viewport(&pf_vp);
 
         switch (button) {
         case PF_QUIT:
@@ -5022,8 +5076,21 @@ static int pictureflow_main(void)
 
             if (ret == -3)
             {
+                /* Pop the main loop's theme push before reinit */
+                FOR_NB_SCREENS(i)
+                    rb->viewportmanager_theme_undo(i, false);
                 if (!reinit())
                     return PLUGIN_OK;
+                /* Push with new setting (reinit loaded new config) */
+                FOR_NB_SCREENS(i)
+                    rb->viewportmanager_theme_enable(i,
+                        pf_cfg.show_statusbar, NULL);
+                rb->lcd_set_viewport(&pf_vp);
+#ifdef HAVE_LCD_COLOR
+                mylcd_set_background(pf_bg_color);
+                mylcd_set_foreground(pf_fg_color);
+#endif
+                mylcd_set_drawmode(DRMODE_FG);
             }
             else if (ret == -2)
                 return PLUGIN_GOTO_WPS;
@@ -5183,36 +5250,15 @@ enum plugin_status plugin_start(const void *parameter)
     struct viewport *vp_main = rb->lcd_set_viewport(NULL);
     lcd_fb = vp_main->buffer->fb_ptr;
 
+    /* Create a framebuffer wrapper identical to the default but at a different
+     * address. lcd_clear_viewport() checks (vp->buffer == &lcd_framebuffer_default)
+     * by pointer — with our own struct, it fills with bg_pattern instead of
+     * copying from the theme backdrop buffer. */
+    pf_framebuffer = *vp_main->buffer;
+
     int ret;
     const char *file = parameter;
     bool file_id3 = (parameter && (((char *) parameter)[0] == '/'));
-
-    /* Query the theme viewport to determine available height */
-    FOR_NB_SCREENS(i)
-        rb->viewportmanager_theme_enable(i, true, NULL);
-    rb->viewport_set_defaults(&pf_vp, SCREEN_MAIN);
-    pf_vp.buffer = NULL; /* ensure LCD API uses the default framebuffer */
-    /* Force full-width viewport: render_slide() writes across all LCD_WIDTH
-     * columns via direct buffer access, so the viewport must match to ensure
-     * clear_viewport() clears the same area. Some themes define a narrower
-     * info viewport (e.g. x=4, width=316) which would leave edge columns
-     * uncleared, causing artifacts. */
-    pf_vp.x = 0;
-    pf_vp.width = LCD_WIDTH;
-    FOR_NB_SCREENS(i)
-        rb->viewportmanager_theme_undo(i, false);
-
-    /* Compute rendering parameters from viewport height.
-     * Keep the visual center at the same screen position as the original
-     * (LCD_HEIGHT/2) so covers don't shift down. The top of the center
-     * slide is clipped by the status bar; the lower half and reflection
-     * use the original compile-time values. */
-    pf_vp_y = pf_vp.y;
-    pf_height = pf_vp.height;
-    pf_half_height = LCD_HEIGHT / 2 - pf_vp_y + 8;
-    pf_lower_half = pf_height - pf_half_height;
-    pf_reflect_height = REFLECT_HEIGHT;
-    pf_display_offs = DISPLAY_OFFS;
 
     if (!check_database())
     {
@@ -5223,9 +5269,10 @@ enum plugin_status plugin_start(const void *parameter)
 
     if (init())
     {
-        /* Enable theme for status bar during main loop */
+        /* Push theme state for main loop */
         FOR_NB_SCREENS(i)
-            rb->viewportmanager_theme_enable(i, true, NULL);
+            rb->viewportmanager_theme_enable(i, pf_cfg.show_statusbar, NULL);
+        rb->sb_set_persistent_title("Cover Flow", Icon_NOICON, SCREEN_MAIN);
         rb->lcd_set_viewport(&pf_vp);
 #ifdef HAVE_LCD_COLOR
         mylcd_set_background(pf_bg_color);
