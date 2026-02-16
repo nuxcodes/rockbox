@@ -353,6 +353,8 @@ struct pf_config_t
 
      int scroll_speed;
      int transition_speed;
+
+     bool text_crossfade;
 };
 
 struct pf_index_t {
@@ -566,7 +568,8 @@ static struct configdata config[] =
     { TYPE_BOOL, 0, 1, { .bool_p = &pf_cfg.update_albumart }, "update albumart", NULL },
     { TYPE_INT, 100, 400, { .int_p = &pf_cfg.scroll_speed }, "scroll speed", NULL },
     { TYPE_INT, 100, 400, { .int_p = &pf_cfg.transition_speed }, "transition speed",
-      NULL }
+      NULL },
+    { TYPE_BOOL, 0, 1, { .bool_p = &pf_cfg.text_crossfade }, "text crossfade", NULL }
 };
 
 #define CONFIG_NUM_ITEMS (sizeof(config) / sizeof(struct configdata))
@@ -770,6 +773,7 @@ static void config_set_defaults(struct pf_config_t *cfg)
      cfg->update_albumart = false;
      cfg->scroll_speed = 200;
      cfg->transition_speed = 200;
+     cfg->text_crossfade = true;
 }
 
 static inline PFreal fmul(PFreal a, PFreal b)
@@ -2866,7 +2870,7 @@ bool load_new_slide(void)
             pf_sldcache.cache[ind_].index - 1 == pf_sldcache.cache[next_].index);
 
         pf_sldcache.right_idx = _SEEK_RIGHT_WHILE(pf_sldcache.right_idx,
-            pf_sldcache.cache[ind_].index - 1 == pf_sldcache.cache[next_].index);
+            pf_sldcache.cache[ind_].index + 1 == pf_sldcache.cache[next_].index);
         if (pf_sldcache.right_idx == -1 || pf_sldcache.left_idx == -1)
             goto fatal_fail;
 
@@ -2879,7 +2883,7 @@ bool load_new_slide(void)
         int prio_l = center - left + 1;
         int prio_r = right - center + 1;
         if ((prio_l < prio_r
-             || right >= number_of_slides) && left > 0)
+             || right >= number_of_slides - 1) && left > 0)
         {
             if (pf_sldcache.free == -1 && !free_slide_prio(prio_l))
             {
@@ -3737,7 +3741,8 @@ static int display_settings_menu(void)
                         ID2P(LANG_RESIZE_COVERS),
                         "Show Statusbar",
                         "Scroll Speed %",
-                        "Transition Speed %");
+                        "Transition Speed %",
+                        "Text Crossfade");
 
     static const struct opt_items backlight_options[] = {
         { STR(LANG_ALWAYS_ON) },
@@ -3822,6 +3827,9 @@ static int display_settings_menu(void)
                 rb->set_int("Transition Speed %", "", 1,
                             &pf_cfg.transition_speed,
                             NULL, 25, 100, 400, NULL );
+                break;
+            case 10:
+                rb->set_bool("Text Crossfade", &pf_cfg.text_crossfade);
                 break;
             case MENU_ATTACHED_USB:
                 return PLUGIN_USB_CONNECTED;
@@ -4632,11 +4640,17 @@ static void draw_album_text(void)
         if (step < 0) c = 255-c;
         if (c > 128 ) { /* half way to next slide .. still not perfect! */
             albumtxt_index = center_index+step;
-            c = (c-128)*2;
+            if (pf_cfg.text_crossfade)
+                c = (c-128)*2;
+            else
+                c = 255;
         }
         else {
             albumtxt_index = center_index;
-            c = (128-c)*2;
+            if (pf_cfg.text_crossfade)
+                c = (128-c)*2;
+            else
+                c = 255;
         }
     }
     else {
@@ -5019,6 +5033,13 @@ static int pictureflow_main(void)
             case pf_cover_in:
                 update_cover_in_animation();
                 render_all_slides();
+#ifdef HAVE_TC_RAMCACHE
+                if (rb->tagcache_is_in_ram()
+                    && center_slide.slide_index != pf_tracks.cur_idx)
+                {
+                    create_track_index(center_slide.slide_index);
+                }
+#endif
                 break;
             case pf_cover_out:
                 show_tracks_while_browsing = false;
