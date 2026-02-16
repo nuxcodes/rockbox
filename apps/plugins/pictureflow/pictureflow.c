@@ -591,7 +591,6 @@ static int step;
 static int target;
 static int fade;
 static int center_index = 0; /* index of the slide that is in the center */
-static int scroll_direction; /* +1 = right, -1 = left, 0 = idle */
 static int itilt;
 static PFreal offsetX;
 static PFreal auto_slide_spacing;
@@ -2879,10 +2878,7 @@ bool load_new_slide(void)
 
         int prio_l = center - left + 1;
         int prio_r = right - center + 1;
-        /* bias prefetch toward scroll direction */
-        int bias_l = (scroll_direction < 0) ? prio_l / 2 : 0;
-        int bias_r = (scroll_direction > 0) ? prio_r / 2 : 0;
-        if (((prio_l - bias_l < prio_r - bias_r)
+        if ((prio_l < prio_r
              || right >= number_of_slides) && left > 0)
         {
             if (pf_sldcache.free == -1 && !free_slide_prio(prio_l))
@@ -3593,8 +3589,6 @@ static void update_scroll_animation(void)
 {
     if (step == 0)
         return;
-
-    scroll_direction = step;
 
     int speed = 16384;
     int i;
@@ -5036,7 +5030,6 @@ static int pictureflow_main(void)
                     return PLUGIN_OK;
                 break;
             case pf_idle:
-                scroll_direction = 0;
                 show_tracks_while_browsing = false;
                 render_all_slides();
                 if (aa_cache.inspected < pf_idx.album_ct)
@@ -5082,7 +5075,8 @@ static int pictureflow_main(void)
 
 
         /* Copy offscreen buffer to LCD and give time to other threads */
-        mylcd_update();
+        if (!is_initial_slide)
+            mylcd_update();
         rb->yield();
 
         switch (button) {
