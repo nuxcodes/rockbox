@@ -4724,10 +4724,6 @@ static bool init(void)
     void * buf;
     size_t buf_size;
 
-    /* Immediately clear the core plugin loader "Loading..." splash */
-    rb->lcd_clear_display();
-    rb->lcd_update();
-
 #ifdef HAVE_ADJUSTABLE_CPU_FREQ
     rb->cpu_boost(true); /* revert in cleanup */
 #endif
