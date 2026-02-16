@@ -17,27 +17,27 @@ Rockbox requires out-of-tree builds. Cross-compiler toolchains are built via `to
 **Environment note:** `brew` and `sudo` are not available in this session. If a build dependency is missing, ask the user to install it manually.
 
 ```bash
-# Build for a hardware target
-mkdir build && cd build
-../tools/configure          # interactive target/type selection
-make                        # compile
-make zip                    # create deployment zip
+# iPod Classic 6G hardware build (clean)
+./build-hw.sh                # rm + mkdir + configure + make + make zip
+# Or incrementally:
+cd build-hw && make -j$(sysctl -n hw.ncpu) && make zip
 
-# Build the SDL simulator (primary way to test on desktop)
-mkdir build-sim && cd build-sim
-../tools/configure          # select target, then (S)imulator type
-make
-./rockboxui                 # run simulator (uses simdisk/ as virtual FS)
+# iPod Classic 6G simulator build
+./build-sim.sh               # configure if needed + make + make install
+# Or incrementally:
+cd build-sim && make -j$(sysctl -n hw.ncpu)
+cd build-sim && ./rockboxui  # run simulator (uses simdisk/ as virtual FS)
 
-# Non-interactive configure
-../tools/configure --target=65 --type=s   # e.g. Clip Zip simulator
+# Non-interactive configure (reference)
+../tools/configure --target=ipod6g --type=n   # hardware (Normal)
+../tools/configure --target=ipod6g --type=s   # simulator
 
 # Other make targets
 make rocks                  # plugins only
 make codecs                 # codecs only
 make bin                    # binary only
-make manual                 # LaTeX manual (requires LaTeX toolchain)
-make voice                  # voice files (requires TTS)
+make zip                    # create deployment zip
+make reconf                 # reconfigure after tools/configure changes
 make clean / make veryclean
 ```
 

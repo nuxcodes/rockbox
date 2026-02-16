@@ -278,6 +278,7 @@ MENUITEM_SETTING(use_led_indicators, &global_settings.use_led_indicators, NULL);
 /* Disk */
 #ifdef HAVE_DISK_STORAGE
 MENUITEM_SETTING(disk_spindown, &global_settings.disk_spindown, NULL);
+MENUITEM_SETTING(storage_mode, &global_settings.storage_mode, NULL);
 #endif
 #ifdef HAVE_DIRCACHE
 static int dircache_callback(int action,
@@ -308,6 +309,7 @@ MENUITEM_SETTING(dircache, &global_settings.dircache, dircache_callback);
 MAKE_MENU(disk_menu, ID2P(LANG_DISK_MENU), 0, Icon_NOICON,
 #ifdef HAVE_DISK_STORAGE
           &disk_spindown,
+          &storage_mode,
 #endif
 #ifdef HAVE_DIRCACHE
             &dircache,

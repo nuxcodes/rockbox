@@ -929,6 +929,7 @@ void settings_apply(bool read_disk)
 #endif
 #ifdef HAVE_DISK_STORAGE
     storage_spindown(global_settings.disk_spindown);
+    storage_set_storage_mode(global_settings.storage_mode);
 #endif
     set_poweroff_timeout(global_settings.poweroff);
     if (global_settings.sleeptimer_on_startup)

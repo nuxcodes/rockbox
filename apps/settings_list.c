@@ -1495,6 +1495,10 @@ const struct settings_list settings[] = {
 #ifdef HAVE_DISK_STORAGE
     INT_SETTING(F_TIME_SETTING, disk_spindown, LANG_SPINDOWN, 5, "disk spindown",
                     UNIT_SEC, 3, 254, 1, NULL, NULL, STORAGE_FUNCTION(spindown)),
+    CHOICE_SETTING(0, storage_mode, LANG_STORAGE_MODE, 0,
+                   "storage mode", "auto,hdd,ssd", NULL, 3,
+                   ID2P(LANG_AUTO), ID2P(LANG_STORAGE_HDD),
+                   ID2P(LANG_STORAGE_SSD)),
 #endif /* HAVE_DISK_STORAGE */
     /* browser */
     TEXT_SETTING(0, start_directory, "start directory", "/", NULL, NULL),

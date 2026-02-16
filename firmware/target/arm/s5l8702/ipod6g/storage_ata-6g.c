@@ -71,6 +71,7 @@ static struct semaphore ata_wakeup;
 static long ata_last_activity_value = -1;
 static long ata_sleep_timeout = 7 * HZ;
 static bool ata_powered;
+static bool ata_ssd_mode = false;
 static struct semaphore mmc_wakeup;
 static struct semaphore mmc_comp_wakeup;
 #ifdef HAVE_ATA_DMA
@@ -744,10 +745,13 @@ static int ata_power_up(void)
             PASS_RC(ata_set_feature(0x02, 0), 3, 5); /* Enable volatile write cache */
         if (identify_info[82] & BIT(6))
             PASS_RC(ata_set_feature(0xaa, 0), 3, 6); /* Enable read lookahead */
-        if (identify_info[83] & BIT(3))
-            PASS_RC(ata_set_feature(0x05, 0x80), 3, 7); /* Enable lowest power mode w/o standby */
-        if (identify_info[83] & BIT(9))
-            PASS_RC(ata_set_feature(0x42, 0x80), 3, 8); /* Enable lowest noise mode */
+        if (!ata_ssd_mode)
+        {
+            if (identify_info[83] & BIT(3))
+                PASS_RC(ata_set_feature(0x05, 0x80), 3, 7); /* Enable lowest power mode w/o standby */
+            if (identify_info[83] & BIT(9))
+                PASS_RC(ata_set_feature(0x42, 0x80), 3, 8); /* Enable lowest noise mode */
+        }
 
         PASS_RC(ata_identify(identify_info), 3, 9); /* Finally, re-read identify info */
     }
@@ -1104,6 +1108,23 @@ void ata_sleepnow(void)
 
     ata_flush_cache();
 
+    if (ata_ssd_mode)
+    {
+        /* SSD mode: just flush cache and idle. Don't power down.
+         * SSDs draw very little idle power and avoiding the full
+         * power-down/power-up cycle saves 100-500ms per wakeup. */
+        logf("ata SSD IDLE %ld", current_tick);
+        if (!ceata && ata_disk_can_sleep())
+        {
+            ata_wait_for_rdy(1000000);
+            ata_write_cbr(&ATA_PIO_DVR, 0);
+            ata_write_cbr(&ATA_PIO_CSD, CMD_STANDBY_IMMEDIATE);
+            ata_wait_for_rdy(1000000);
+        }
+        mutex_unlock(&ata_mutex);
+        return;
+    }
+
     if (ceata || ata_disk_can_sleep()) {
         logf("ata SLEEP %ld", current_tick);
 
@@ -1139,6 +1160,22 @@ void ata_spin(void)
     ata_set_active();
 }
 
+void ata_set_storage_mode(int mode)
+{
+    /* 0=auto, 1=HDD, 2=SSD */
+    if (mode == 2)
+        ata_ssd_mode = true;
+    else if (mode == 1)
+        ata_ssd_mode = false;
+    else /* auto */
+        ata_ssd_mode = ata_disk_isssd();
+}
+
+bool ata_get_ssd_mode(void)
+{
+    return ata_ssd_mode;
+}
+
 long ata_last_disk_activity(void)
 {
     return ata_last_activity_value;
@@ -1160,6 +1197,9 @@ int ata_init(void)
     mutex_unlock(&ata_mutex);
     if (IS_ERR(rc))
         return rc;
+
+    /* Auto-detect SSD before settings are loaded */
+    ata_ssd_mode = ata_disk_isssd();
 
     /* Logical sector size */
     if (ceata)

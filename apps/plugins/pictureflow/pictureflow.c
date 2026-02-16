@@ -282,7 +282,7 @@ static inline pix_t pf_color_mix(int brightness)
 #define DISPLAY_LEFT_R (PFREAL_HALF - LCD_WIDTH * PFREAL_HALF)
 #define MAXSLIDE_LEFT_R (PFREAL_HALF - DISPLAY_WIDTH * PFREAL_HALF)
 
-#define SLIDE_CACHE_SIZE 64 /* probably more than can be loaded */
+#define SLIDE_CACHE_SIZE 100
 
 #define MAX_SLIDES_COUNT 10
 
@@ -297,6 +297,15 @@ static inline pix_t pf_color_mix(int brightness)
 #define EMPTY_SLIDE_BMP PLUGIN_DEMOS_DIR "/pictureflow_emptyslide.bmp"
 #define SPLASH_BMP PLUGIN_DEMOS_DIR "/pictureflow_splash.bmp"
 
+/* Ordered Bayer dithering for 24-bit to RGB565 conversion */
+#ifdef HAVE_LCD_COLOR
+static const unsigned char pf_dither_table[16] =
+    {   0,192, 48,240, 12,204, 60,252,  3,195, 51,243, 15,207, 63,255 };
+#define PF_DITHERY(y) (pf_dither_table[(y) & 15] & 0xAA)
+#define PF_DITHERX(x) (pf_dither_table[(x) & 15])
+#define PF_DITHERXDY(x,dy) (PF_DITHERX(x) ^ dy)
+#endif
+
 /* some magic numbers for cache_version. */
 #define CACHE_REBUILD   0
 
@@ -308,7 +317,7 @@ static inline pix_t pf_color_mix(int brightness)
 #define ERROR_USER_ABORT    -4
 
 /* current version for cover cache */
-#define CACHE_VERSION 4
+#define CACHE_VERSION 5
 #define CONFIG_VERSION 1
 #define CONFIG_FILE "pictureflow.cfg"
 #define INDEX_HDR "PFID"
@@ -582,6 +591,7 @@ static int step;
 static int target;
 static int fade;
 static int center_index = 0; /* index of the slide that is in the center */
+static int scroll_direction; /* +1 = right, -1 = left, 0 = idle */
 static int itilt;
 static PFreal offsetX;
 static PFreal auto_slide_spacing;
@@ -952,12 +962,16 @@ static void output_row_8_transposed(uint32_t row, void * row_in,
 #else
     struct uint8_rgb *qp = (struct uint8_rgb*)row_in;
     unsigned r, g, b;
-    for (; dest < end; dest += ctx->bm->height)
+    int col = 0;
+    uint8_t dy = PF_DITHERY(row);
+    for (; dest < end; dest += ctx->bm->height, col++)
     {
-        r = scale_subpixel_lcd(qp->red, 5);
-        g = scale_subpixel_lcd(qp->green, 6);
-        b = scale_subpixel_lcd((qp++)->blue, 5);
-        *dest = FB_RGBPACK_LCD(r,g,b);
+        int delta = ctx->dither ? PF_DITHERXDY(col, dy) : 127;
+        r = (31 * qp->red + (qp->red >> 3) + delta) >> 8;
+        g = (63 * qp->green + (qp->green >> 2) + delta) >> 8;
+        b = (31 * qp->blue + (qp->blue >> 3) + delta) >> 8;
+        qp++;
+        *dest = FB_RGBPACK_LCD(r, g, b);
     }
 #endif
 }
@@ -976,13 +990,19 @@ static void output_row_32_transposed(uint32_t row, void * row_in,
 #else
     struct uint32_argb *qp = (struct uint32_argb*)row_in;
     int r, g, b;
-    for (; dest < end; dest += ctx->bm->height)
+    int col = 0;
+    uint8_t dy = PF_DITHERY(row);
+    for (; dest < end; dest += ctx->bm->height, col++)
     {
-        r = scale_subpixel_lcd(SC_OUT(qp->r, ctx), 5);
-        g = scale_subpixel_lcd(SC_OUT(qp->g, ctx), 6);
-        b = scale_subpixel_lcd(SC_OUT(qp->b, ctx), 5);
+        int delta = ctx->dither ? PF_DITHERXDY(col, dy) : 127;
+        r = SC_OUT(qp->r, ctx);
+        g = SC_OUT(qp->g, ctx);
+        b = SC_OUT(qp->b, ctx);
         qp++;
-        *dest = FB_RGBPACK_LCD(r,g,b);
+        r = (31 * r + (r >> 3) + delta) >> 8;
+        g = (63 * g + (g >> 2) + delta) >> 8;
+        b = (31 * b + (b >> 3) + delta) >> 8;
+        *dest = FB_RGBPACK_LCD(r, g, b);
     }
 #endif
 }
@@ -994,17 +1014,20 @@ static void output_row_32_transposed_fromyuv(uint32_t row, void * row_in,
     pix_t *dest = (pix_t*)ctx->bm->data + row;
     pix_t *end = dest + ctx->bm->height * ctx->bm->width;
     struct uint32_argb *qp = (struct uint32_argb*)row_in;
-    for (; dest < end; dest += ctx->bm->height)
+    int col = 0;
+    uint8_t dy = PF_DITHERY(row);
+    for (; dest < end; dest += ctx->bm->height, col++)
     {
         unsigned r, g, b, y, u, v;
+        int delta = ctx->dither ? PF_DITHERXDY(col, dy) : 127;
         y = SC_OUT(qp->b, ctx);
         u = SC_OUT(qp->g, ctx);
         v = SC_OUT(qp->r, ctx);
         qp++;
         yuv_to_rgb(y, u, v, &r, &g, &b);
-        r = scale_subpixel_lcd(r, 5);
-        g = scale_subpixel_lcd(g, 6);
-        b = scale_subpixel_lcd(b, 5);
+        r = (31 * r + (r >> 3) + delta) >> 8;
+        g = (63 * g + (g >> 2) + delta) >> 8;
+        b = (31 * b + (b >> 3) + delta) >> 8;
         *dest = FB_RGBPACK_LCD(r, g, b);
     }
 }
@@ -2289,7 +2312,7 @@ static bool incremental_albumart_cache(bool verbose)
 
     int idx, ret;
     unsigned int hash_artist, hash_album;
-    unsigned int format = FORMAT_NATIVE;
+    unsigned int format = FORMAT_NATIVE | FORMAT_DITHER;
 
     if (pf_cfg.resize)
         format |= FORMAT_RESIZE|FORMAT_KEEP_ASPECT;
@@ -2423,7 +2446,13 @@ static int create_empty_slide(bool force)
  */
 static void thread(void)
 {
+    /* SSD mode: poll more frequently since disk access is cheap */
+#ifdef HAVE_DISK_STORAGE
+    long sleep_time = (rb->global_settings->storage_mode == 2)
+                      ? HZ : 5 * HZ;
+#else
     long sleep_time = 5 * HZ;
+#endif
     struct queue_event ev;
     while (1) {
         rb->queue_wait_w_tmo(&thread_q, &ev, sleep_time);
@@ -2722,7 +2751,6 @@ static int read_pfraw(char* filename, int prio)
         return -1;
     }
 
-    rb->yield(); /* allow audio to play when fast scrolling */
     struct dim *bm = rb->buflib_get_data(&buf_ctx, hid);
 
     bm->width = bmph.width;
@@ -2851,7 +2879,11 @@ bool load_new_slide(void)
 
         int prio_l = center - left + 1;
         int prio_r = right - center + 1;
-        if ((prio_l < prio_r || right >= number_of_slides) && left > 0)
+        /* bias prefetch toward scroll direction */
+        int bias_l = (scroll_direction < 0) ? prio_l / 2 : 0;
+        int bias_r = (scroll_direction > 0) ? prio_r / 2 : 0;
+        if (((prio_l - bias_l < prio_r - bias_r)
+             || right >= number_of_slides) && left > 0)
         {
             if (pf_sldcache.free == -1 && !free_slide_prio(prio_l))
             {
@@ -3561,6 +3593,8 @@ static void update_scroll_animation(void)
 {
     if (step == 0)
         return;
+
+    scroll_direction = step;
 
     int speed = 16384;
     int i;
@@ -4690,6 +4724,10 @@ static bool init(void)
     void * buf;
     size_t buf_size;
 
+    /* Immediately clear the core plugin loader "Loading..." splash */
+    rb->lcd_clear_display();
+    rb->lcd_update();
+
 #ifdef HAVE_ADJUSTABLE_CPU_FREQ
     rb->cpu_boost(true); /* revert in cleanup */
 #endif
@@ -4813,8 +4851,10 @@ static bool init(void)
 
     number_of_slides = pf_idx.album_ct;
 
-    size_t aa_bufsz = ALIGN_DOWN(pf_idx.buf_sz / 4, sizeof(long));
-    if (aa_bufsz < DISPLAY_WIDTH * DISPLAY_HEIGHT * sizeof(pix_t))
+    size_t aa_min = DISPLAY_WIDTH * DISPLAY_HEIGHT * sizeof(pix_t);
+    size_t aa_bufsz = ALIGN_DOWN(MAX(aa_min * 3, pf_idx.buf_sz / 8),
+                                 sizeof(long));
+    if (aa_bufsz < aa_min)
     {
         error_wait("Not enough memory for album art cache");
         return false;
@@ -4843,8 +4883,6 @@ static bool init(void)
         config_save(CACHE_REBUILD, false);
         error_wait("Could not create album art cache");
     }
-    else if(aa_cache.inspected < pf_idx.album_ct)
-        rb->splash(HZ * 2, "Updating album art cache in background");
 
     if (pf_cfg.cache_version != CACHE_VERSION)
         config_save(CACHE_VERSION, pf_cfg.update_albumart);
@@ -5002,6 +5040,7 @@ static int pictureflow_main(void)
                     return PLUGIN_OK;
                 break;
             case pf_idle:
+                scroll_direction = 0;
                 show_tracks_while_browsing = false;
                 render_all_slides();
                 if (aa_cache.inspected < pf_idx.album_ct)

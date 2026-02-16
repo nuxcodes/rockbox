@@ -220,6 +220,11 @@ static inline int ata_disk_can_sleep(void)
 
 int ata_flush(void);
 
+/* Set storage mode: 0=auto, 1=HDD, 2=SSD */
+void ata_set_storage_mode(int mode);
+/* Returns true if SSD-optimized behavior is active */
+bool ata_get_ssd_mode(void);
+
 #ifdef HAVE_ATA_DMA
 /* Returns current DMA mode */
 int ata_get_dma_mode(void);

@@ -540,6 +540,7 @@ struct user_settings
 #ifdef HAVE_DISK_STORAGE
     int disk_spindown; /* time until disk spindown, in seconds (0=off) */
     int buffer_margin; /* audio buffer watermark margin, in seconds */
+    int storage_mode;  /* 0=auto, 1=HDD, 2=SSD */
 #endif
 
     int dirfilter;     /* 0=display all, 1=only supported, 2=only music,

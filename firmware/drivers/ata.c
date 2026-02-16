@@ -666,6 +666,16 @@ void ata_spindown(int seconds)
     sleep_timeout = seconds * HZ;
 }
 
+void ata_set_storage_mode(int mode)
+{
+    (void)mode;
+}
+
+bool ata_get_ssd_mode(void)
+{
+    return false;
+}
+
 bool ata_disk_is_active(void)
 {
     return (ata_state >= ATA_SPINUP);

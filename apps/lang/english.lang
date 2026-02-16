@@ -17029,3 +17029,54 @@
     general_purpose_led: "Use LED indicators"
   </voice>
 </phrase>
+<phrase>
+  id: LANG_STORAGE_MODE
+  desc: in settings_menu, storage mode setting
+  user: core
+  <source>
+    *: none
+    disk_storage: "Storage Mode"
+  </source>
+  <dest>
+    *: none
+    disk_storage: "Storage Mode"
+  </dest>
+  <voice>
+    *: none
+    disk_storage: "Storage Mode"
+  </voice>
+</phrase>
+<phrase>
+  id: LANG_STORAGE_HDD
+  desc: in settings_menu, storage mode option
+  user: core
+  <source>
+    *: none
+    disk_storage: "HDD (Spinning Disk)"
+  </source>
+  <dest>
+    *: none
+    disk_storage: "HDD (Spinning Disk)"
+  </dest>
+  <voice>
+    *: none
+    disk_storage: "HDD"
+  </voice>
+</phrase>
+<phrase>
+  id: LANG_STORAGE_SSD
+  desc: in settings_menu, storage mode option
+  user: core
+  <source>
+    *: none
+    disk_storage: "SSD (Solid State)"
+  </source>
+  <dest>
+    *: none
+    disk_storage: "SSD (Solid State)"
+  </dest>
+  <voice>
+    *: none
+    disk_storage: "SSD"
+  </voice>
+</phrase>
