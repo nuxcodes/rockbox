@@ -930,7 +930,7 @@ int plugin_load(const char* plugin, const void* parameter)
     }
 
 #ifdef HAVE_DISK_STORAGE
-    if (!storage_disk_is_active() && !storage_get_ssd_mode())
+    if (!storage_disk_is_active() && global_settings.storage_mode != 2)
         splash(0, ID2P(LANG_WAIT));
 #endif
     strcpy(current_plugin, plugin);

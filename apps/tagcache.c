@@ -121,6 +121,10 @@
 /* How much to allocate extra space for ramcache. */
 #define TAGCACHE_RESERVE 32768
 
+/* Minimum memory to leave free for the audio buffer when allocating
+ * tagcache tempbuf or ramcache. Prevents OOM panics in playback. */
+#define TAGCACHE_MIN_AUDIO_RESERVE (1024 * 1024) /* 1 MB */
+
 /*
  * Define how long one entry must be at least (longer -> less memory at commit).
  * Must be at least 4 bytes in length for correct alignment.
@@ -786,12 +790,22 @@ static void allocate_tempbuf(void)
         tempbuf_size = size;
 #else /* !__PCTOOL__ */
     /* Need to pass dummy ops to prevent the buffer being moved
-     * out from under us, since we yield during the tagcache commit. */
-    tempbuf_handle = core_alloc_maximum(&size, &buflib_ops_locked);
-    if (tempbuf_handle > 0)
+     * out from under us, since we yield during the tagcache commit.
+     *
+     * Don't grab ALL memory -- leave a reserve so audio_reset_buffer()
+     * can still allocate if playback starts during a commit. Without
+     * this, core_alloc_maximum() + buflib_ops_locked starves the audio
+     * buffer and causes an OOM panic. */
+    size = core_allocatable();
+    if (size > TAGCACHE_MIN_AUDIO_RESERVE)
     {
-        tempbuf = core_get_data(tempbuf_handle);
-        tempbuf_size = size;
+        size -= TAGCACHE_MIN_AUDIO_RESERVE;
+        tempbuf_handle = core_alloc_ex(size, &buflib_ops_locked);
+        if (tempbuf_handle > 0)
+        {
+            tempbuf = core_get_data(tempbuf_handle);
+            tempbuf_size = size;
+        }
     }
 #endif /* __PCTOOL__ */
 
@@ -4345,6 +4359,18 @@ static bool allocate_tagcache(void)
     alloc_size += tcmh.tch.entry_count*sizeof(struct dircache_fileref);
 #endif
 
+    /* Ensure enough memory remains for the audio buffer after allocation.
+     * Without this check, a large database can consume so much RAM that
+     * audio_reset_buffer() panics on OOM when playback starts. */
+    size_t available = core_available();
+    if (alloc_size + TAGCACHE_MIN_AUDIO_RESERVE > available)
+    {
+        logf("tagcache: ramcache %luKB exceeds budget (%luKB avail)",
+             (unsigned long)(alloc_size / 1024),
+             (unsigned long)(available / 1024));
+        return false;
+    }
+
     int handle = core_alloc_ex(alloc_size, &ops);
     if (handle <= 0)
         return false;
@@ -5205,9 +5231,9 @@ static void load_ramcache(void)
 
     if (!tc_stat.ramcache)
     {
-        /* If loading failed, it must indicate some problem with the db
-         * so disable it entirely to prevent further issues. */
-        tc_stat.ready = false;
+        /* RAM loading failed. Free the allocation and fall back to
+         * disk-based access. Do not set tc_stat.ready = false here;
+         * the on-disk database may still be valid and usable. */
         tcramcache.hdr = NULL;
         int handle = tcramcache.handle;
         tcramcache.handle = 0;
