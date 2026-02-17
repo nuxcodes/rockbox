@@ -652,15 +652,63 @@ static int ata_get_best_mode(unsigned short identword, int max, int modetype)
  */
 static int ata_power_up(void);
 
-/* SSD wakeup: delegate to the full power-up path.
- * The drive was never put in standby (just the controller clock
- * was gated), so ata_power_up() completes quickly (~300ms)
- * because the drive is already active and responsive. */
 static int ata_ssd_wakeup(void)
 {
     logf("ata SSD WAKE %ld", current_tick);
+    ata_set_active();
+
+    /* Ungate the ATA controller clock */
+    PWRCON(0) &= ~(1 << 5);
+
+    /* Re-initialize controller WITHOUT resetting the ATA bus.
+     * ATA_SWRST is intentionally skipped -- it asserts RESET# on
+     * the bus which causes iFlash adapters to re-initialize (~3s).
+     * The drive was never put in standby and the controller was
+     * cleanly disabled before clock gating, so the drive's state
+     * (DMA mode, write cache, read lookahead) is unchanged. */
+    ATA_CFG = BIT(0);
+    sleep(HZ / 100);
+    ATA_CFG = 0;
+    sleep(HZ / 100);
+
+    /* Skip ATA_SWRST -- do not reset the drive */
+
+    ATA_CONTROL = BIT(0);
+    sleep(HZ / 100);
+
+    /* Restore controller timing from cached identify_info */
+    uint32_t piotime = 0x11f3;
+    if (identify_info[53] & BIT(1))
+    {
+        if (identify_info[64] & BIT(1))
+            piotime = 0x2072;
+        else if (identify_info[64] & BIT(0))
+            piotime = 0x7083;
+    }
+    ATA_PIO_TIME = piotime;
+    ATA_PIO_LHR = 0;
+    ATA_CFG = BIT(6);
+    while (!(ATA_PIO_READY & BIT(1))) yield();
+
+    /* Verify the drive is still responsive. If not, fall back to
+     * full ata_power_up() which includes SRST + identify + features. */
+    if (ata_wait_for_rdy(500000))
+    {
+        logf("ata SSD WAKE rdy fail, full powerup");
+        ata_ssd_sleeping = false;
+        return ata_power_up();
+    }
+
+#ifdef HAVE_ATA_DMA
+    if (dma_mode & 0x40)
+        ATA_UDMA_TIME = udmatimes[dma_mode & 0xf];
+    else if (dma_mode & 0x20)
+        ATA_MDMA_TIME = mwdmatimes[dma_mode & 0xf];
+#endif
+
     ata_ssd_sleeping = false;
-    return ata_power_up();
+    ata_powered = true;
+    return 0;
 }
 
 static int ata_power_up(void)
