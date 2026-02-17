@@ -3629,8 +3629,11 @@ static void update_scroll_animation(void)
     if (center_index != index) {
         center_index = index;
         rb->queue_post(&thread_q, EV_WAKEUP, 0);
-        slide_frame = (index << 16) | (step < 0 ? 0xffff : 0);
-        pos = slide_frame & 0xffff;
+        slide_frame = index << 16;
+        /* Override stale pos/tick/ftick from the pre-snap slide_frame.
+         * Without this, for step < 0 the stale tick displaces right
+         * slides toward the screen edge (visible at high speeds). */
+        pos = (step < 0) ? 65535 : 0;
         neg = 65536 - pos;
         tick = (step < 0) ? neg : pos;
         ftick = (tick * PFREAL_ONE) >> 16;
