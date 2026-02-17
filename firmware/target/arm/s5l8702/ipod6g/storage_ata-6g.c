@@ -1110,17 +1110,23 @@ void ata_sleepnow(void)
 
     if (ata_ssd_mode)
     {
-        /* SSD mode: just flush cache and idle. Don't power down.
-         * SSDs draw very little idle power and avoiding the full
-         * power-down/power-up cycle saves 100-500ms per wakeup. */
-        logf("ata SSD IDLE %ld", current_tick);
+        logf("ata SSD SLEEP %ld", current_tick);
         if (!ceata && ata_disk_can_sleep())
         {
             ata_wait_for_rdy(1000000);
             ata_write_cbr(&ATA_PIO_DVR, 0);
             ata_write_cbr(&ATA_PIO_CSD, CMD_STANDBY_IMMEDIATE);
             ata_wait_for_rdy(1000000);
+            sleep(HZ / 30);
         }
+        /* Gate ATA controller clock — main source of idle heat.
+         * SSD stays powered (skip ide_power_enable) since flash
+         * draws negligible idle current and needs no spin-up. */
+        ATA_CONTROL = 0;
+        while (!(ATA_CONTROL & BIT(1)))
+            yield();
+        PWRCON(0) |= (1 << 5);
+        ata_powered = false;
         mutex_unlock(&ata_mutex);
         return;
     }

@@ -2870,7 +2870,7 @@ bool load_new_slide(void)
             pf_sldcache.cache[ind_].index - 1 == pf_sldcache.cache[next_].index);
 
         pf_sldcache.right_idx = _SEEK_RIGHT_WHILE(pf_sldcache.right_idx,
-            pf_sldcache.cache[ind_].index - 1 == pf_sldcache.cache[next_].index);
+            pf_sldcache.cache[ind_].index + 1 == pf_sldcache.cache[next_].index);
         if (pf_sldcache.right_idx == -1 || pf_sldcache.left_idx == -1)
             goto fatal_fail;
 
@@ -3550,7 +3550,7 @@ static void render_all_slides(void)
             if (alpha > 256) alpha = 256;
         }
         /* if step>0 and nright==1, right_slides[0] is fading in  */
-        alpha = ((step > 0) ? ((nright == 1) ? 128 : 0) : -128) + fade / 2;
+        alpha = ((step > 0) ? ((nright == 1) ? 128 : 0) : -64) + fade / 2;
         for (index = nright - 1; index >= 0; index--) {
             if (index == 0 && skip_right_0) {
                 alpha += 128;
@@ -3630,6 +3630,14 @@ static void update_scroll_animation(void)
         center_index = index;
         rb->queue_post(&thread_q, EV_WAKEUP, 0);
         slide_frame = index << 16;
+        /* Recalculate pos/tick/ftick/fade for the snapped slide_frame.
+         * Without this, stale pre-snap values cause a one-frame alpha
+         * discontinuity (flash) at boundary crossings. */
+        pos = (step < 0) ? 65535 : 0;
+        neg = 65536 - pos;
+        tick = (step < 0) ? neg : pos;
+        ftick = (tick * PFREAL_ONE) >> 16;
+        fade = pos / 256;
         center_slide.slide_index = center_index;
         for (i = 0; i < pf_cfg.num_slides; i++)
             left_slides[i].slide_index = center_index - 1 - i;
