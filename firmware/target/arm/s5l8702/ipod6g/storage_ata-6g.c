@@ -72,6 +72,7 @@ static long ata_last_activity_value = -1;
 static long ata_sleep_timeout = 7 * HZ;
 static bool ata_powered;
 static bool ata_ssd_mode = false;
+static bool ata_ssd_sleeping = false;
 static struct semaphore mmc_wakeup;
 static struct semaphore mmc_comp_wakeup;
 #ifdef HAVE_ATA_DMA
@@ -649,6 +650,54 @@ static int ata_get_best_mode(unsigned short identword, int max, int modetype)
  *  Tcyc = tDVS+tDVH
  *  WR[bytes/s] = 1/Tcyc[s] * 2[bytes]
  */
+static int ata_power_up(void);
+
+/* SSD wakeup: controller re-init only, skip identify/features.
+ * The drive stayed powered so its state is unchanged. */
+static int ata_ssd_wakeup(void)
+{
+    logf("ata SSD WAKE %ld", current_tick);
+    ata_set_active();
+
+    /* GPIOs still configured, LDO still on — just ungate clock */
+    PWRCON(0) &= ~(1 << 5);
+    ATA_CFG = BIT(0);
+    sleep(HZ / 100);
+    ATA_CFG = 0;
+    sleep(HZ / 100);
+    ATA_SWRST = BIT(0);
+    sleep(HZ / 100);
+    ATA_SWRST = 0;
+    sleep(HZ / 10);
+    ATA_CONTROL = BIT(0);
+    sleep(HZ / 5);
+
+    /* Restore controller timing from cached identify_info */
+    uint32_t piotime = 0x11f3;
+    if (identify_info[53] & BIT(1))
+    {
+        if (identify_info[64] & BIT(1))
+            piotime = 0x2072;
+        else if (identify_info[64] & BIT(0))
+            piotime = 0x7083;
+    }
+    ATA_PIO_TIME = piotime;
+    ATA_PIO_LHR = 0;
+    ATA_CFG = BIT(6);
+    while (!(ATA_PIO_READY & BIT(1))) yield();
+
+#ifdef HAVE_ATA_DMA
+    if (dma_mode & 0x40)
+        ATA_UDMA_TIME = udmatimes[dma_mode & 0xf];
+    else if (dma_mode & 0x20)
+        ATA_MDMA_TIME = mwdmatimes[dma_mode & 0xf];
+#endif
+
+    ata_ssd_sleeping = false;
+    ata_powered = true;
+    return 0;
+}
+
 static int ata_power_up(void)
 {
     logf("ata POWERUP %ld", current_tick);
@@ -770,6 +819,7 @@ static int ata_power_up(void)
         ata_lba48 = false;
     }
 
+    ata_ssd_sleeping = false;
     ata_powered = true;
     ata_set_active();
     return 0;
@@ -916,7 +966,12 @@ static int ata_rw_chunk(uint64_t sector, uint32_t cnt, void* buffer, bool write)
 static int ata_transfer_sectors(uint64_t sector, int count, void* buffer, int write)
 {
     if (!ata_powered)
-        ata_power_up();
+    {
+        if (ata_ssd_sleeping)
+            ata_ssd_wakeup();
+        else
+            ata_power_up();
+    }
     if (sector + count > total_sectors)
         RET_ERR(0);
     ata_set_active();
@@ -1108,10 +1163,19 @@ void ata_sleepnow(void)
 
     ata_flush_cache();
 
-    if (ata_ssd_mode)
-    {
+    if (ceata) {
+        logf("ata SLEEP %ld", current_tick);
+        memset(ceata_taskfile, 0, 16);
+        ceata_taskfile[0xf] = CMD_STANDBY_IMMEDIATE;
+        ceata_wait_idle();
+        ceata_write_multiple_register(0, ceata_taskfile, 16);
+        ceata_wait_idle();
+        sleep(HZ);
+        PWRCON(0) |= (1 << 9);
+        ata_power_down();
+    } else if (ata_ssd_mode) {
         logf("ata SSD SLEEP %ld", current_tick);
-        if (!ceata && ata_disk_can_sleep())
+        if (ata_disk_can_sleep())
         {
             ata_wait_for_rdy(1000000);
             ata_write_cbr(&ATA_PIO_DVR, 0);
@@ -1119,44 +1183,29 @@ void ata_sleepnow(void)
             ata_wait_for_rdy(1000000);
             sleep(HZ / 30);
         }
-        /* Gate ATA controller clock — main source of idle heat.
-         * SSD stays powered (skip ide_power_enable) since flash
-         * draws negligible idle current and needs no spin-up. */
+        /* Gate ATA clock to stop idle heat. Keep drive powered
+         * and GPIOs configured for fast wakeup via ata_ssd_wakeup(). */
         ATA_CONTROL = 0;
         while (!(ATA_CONTROL & BIT(1)))
             yield();
         PWRCON(0) |= (1 << 5);
+        ata_ssd_sleeping = true;
         ata_powered = false;
-        mutex_unlock(&ata_mutex);
-        return;
-    }
-
-    if (ceata || ata_disk_can_sleep()) {
+    } else if (ata_disk_can_sleep()) {
         logf("ata SLEEP %ld", current_tick);
-
-        if (ceata) {
-            memset(ceata_taskfile, 0, 16);
-            ceata_taskfile[0xf] = CMD_STANDBY_IMMEDIATE;
-            ceata_wait_idle();
-            ceata_write_multiple_register(0, ceata_taskfile, 16);
-            ceata_wait_idle();
-            sleep(HZ);
-            PWRCON(0) |= (1 << 9);
-        } else {
-            ata_wait_for_rdy(1000000);
-            ata_write_cbr(&ATA_PIO_DVR, 0);
-            ata_write_cbr(&ATA_PIO_CSD, CMD_STANDBY_IMMEDIATE);
-            ata_wait_for_rdy(1000000);
-            sleep(HZ / 30);
-            ATA_CONTROL = 0;
-            while (!(ATA_CONTROL & BIT(1)))
-                yield();
-            PWRCON(0) |= (1 << 5);
-        }
+        ata_wait_for_rdy(1000000);
+        ata_write_cbr(&ATA_PIO_DVR, 0);
+        ata_write_cbr(&ATA_PIO_CSD, CMD_STANDBY_IMMEDIATE);
+        ata_wait_for_rdy(1000000);
+        sleep(HZ / 30);
+        ATA_CONTROL = 0;
+        while (!(ATA_CONTROL & BIT(1)))
+            yield();
+        PWRCON(0) |= (1 << 5);
+        ata_power_down();
+    } else if (canflush) {
+        ata_power_down();
     }
-
-    if (ceata || ata_disk_can_sleep() || canflush)
-        ata_power_down(); // XXX add a powerdown delay similar to main ATA driver?
 
     mutex_unlock(&ata_mutex);
 }
