@@ -123,6 +123,30 @@ Multiple backends: native assembler threads (ARM, m68k, MIPS) with cooperative m
 - `tools/buildzip.pl` — creates deployment ZIP
 - `tools/voice.pl` — voice file generator (TTS)
 
+## Release Workflow
+
+To build, tag, and publish a release on GitHub:
+
+```bash
+# 1. Build hardware release zip
+cd build-hw && make -j$(sysctl -n hw.ncpu) && make zip
+
+# 2. Commit, tag, and push
+git add <files>
+git commit -m "vX.Y: description"
+git tag vX.Y
+git push origin master
+git push origin vX.Y
+
+# 3. Create GitHub release with the zip attached
+gh release create vX.Y build-hw/rockbox.zip \
+    --repo nuxcodes/rockbox --title "vX.Y" \
+    --notes "Release notes here"
+# Add --prerelease for alpha/beta tags
+```
+
+Releases are published at `https://github.com/nuxcodes/rockbox/releases`.
+
 ## Code Review
 
 Contributions go through Gerrit at `gerrit.rockbox.org` (port 29418). See `.gitreview` config and https://www.rockbox.org/wiki/UsingGit.

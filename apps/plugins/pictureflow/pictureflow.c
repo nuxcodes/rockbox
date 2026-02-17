@@ -3629,7 +3629,12 @@ static void update_scroll_animation(void)
     if (center_index != index) {
         center_index = index;
         rb->queue_post(&thread_q, EV_WAKEUP, 0);
-        slide_frame = index << 16;
+        slide_frame = (index << 16) | (step < 0 ? 0xffff : 0);
+        pos = slide_frame & 0xffff;
+        neg = 65536 - pos;
+        tick = (step < 0) ? neg : pos;
+        ftick = (tick * PFREAL_ONE) >> 16;
+        fade = pos / 256;
         center_slide.slide_index = center_index;
         for (i = 0; i < pf_cfg.num_slides; i++)
             left_slides[i].slide_index = center_index - 1 - i;
