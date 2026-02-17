@@ -3563,8 +3563,11 @@ static bool commit(void)
             tcrc_buffer_unlock();
         }
 
-        /* Reload tagcache. */
-        if (tc_stat.ramcache_allocated > 0)
+        /* Reload tagcache -- only re-scan if we actually committed
+         * new entries. A 0-entry commit must not re-trigger a scan,
+         * otherwise the cycle load_ramcache -> build -> commit(0) ->
+         * start_scan -> load_ramcache -> ... repeats forever. */
+        if (tc_stat.ramcache_allocated > 0 && tch.entry_count > 0)
             tagcache_start_scan();
 #endif /* HAVE_TC_RAMCACHE */
 

@@ -652,50 +652,15 @@ static int ata_get_best_mode(unsigned short identword, int max, int modetype)
  */
 static int ata_power_up(void);
 
-/* SSD wakeup: controller re-init only, skip identify/features.
- * The drive stayed powered so its state is unchanged. */
+/* SSD wakeup: delegate to the full power-up path.
+ * The drive was never put in standby (just the controller clock
+ * was gated), so ata_power_up() completes quickly (~300ms)
+ * because the drive is already active and responsive. */
 static int ata_ssd_wakeup(void)
 {
     logf("ata SSD WAKE %ld", current_tick);
-    ata_set_active();
-
-    /* GPIOs still configured, LDO still on — just ungate clock */
-    PWRCON(0) &= ~(1 << 5);
-    ATA_CFG = BIT(0);
-    sleep(HZ / 100);
-    ATA_CFG = 0;
-    sleep(HZ / 100);
-    ATA_SWRST = BIT(0);
-    sleep(HZ / 100);
-    ATA_SWRST = 0;
-    sleep(HZ / 10);
-    ATA_CONTROL = BIT(0);
-    sleep(HZ / 5);
-
-    /* Restore controller timing from cached identify_info */
-    uint32_t piotime = 0x11f3;
-    if (identify_info[53] & BIT(1))
-    {
-        if (identify_info[64] & BIT(1))
-            piotime = 0x2072;
-        else if (identify_info[64] & BIT(0))
-            piotime = 0x7083;
-    }
-    ATA_PIO_TIME = piotime;
-    ATA_PIO_LHR = 0;
-    ATA_CFG = BIT(6);
-    while (!(ATA_PIO_READY & BIT(1))) yield();
-
-#ifdef HAVE_ATA_DMA
-    if (dma_mode & 0x40)
-        ATA_UDMA_TIME = udmatimes[dma_mode & 0xf];
-    else if (dma_mode & 0x20)
-        ATA_MDMA_TIME = mwdmatimes[dma_mode & 0xf];
-#endif
-
     ata_ssd_sleeping = false;
-    ata_powered = true;
-    return 0;
+    return ata_power_up();
 }
 
 static int ata_power_up(void)
@@ -1175,16 +1140,11 @@ void ata_sleepnow(void)
         ata_power_down();
     } else if (ata_ssd_mode) {
         logf("ata SSD SLEEP %ld", current_tick);
-        if (ata_disk_can_sleep())
-        {
-            ata_wait_for_rdy(1000000);
-            ata_write_cbr(&ATA_PIO_DVR, 0);
-            ata_write_cbr(&ATA_PIO_CSD, CMD_STANDBY_IMMEDIATE);
-            ata_wait_for_rdy(1000000);
-            sleep(HZ / 30);
-        }
-        /* Gate ATA clock to stop idle heat. Keep drive powered
-         * and GPIOs configured for fast wakeup via ata_ssd_wakeup(). */
+        /* Skip STANDBY_IMMEDIATE -- flash draws negligible idle
+         * current, and sending standby forces a slow wakeup
+         * (3-5s on iFlash).  Just flush, gate the ATA controller
+         * clock to stop SoC heat, and leave the drive active for
+         * instant wakeup. */
         ATA_CONTROL = 0;
         while (!(ATA_CONTROL & BIT(1)))
             yield();

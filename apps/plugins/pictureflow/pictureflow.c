@@ -4240,9 +4240,11 @@ static bool show_track_list(void)
 {
     pf_clear_display();
     if ( center_slide.slide_index != pf_tracks.cur_idx ) {
+        if (rb->global_settings->storage_mode != 2
 #ifdef HAVE_TC_RAMCACHE
-        if (!rb->tagcache_is_in_ram())
+            && !rb->tagcache_is_in_ram()
 #endif
+        )
             show_track_list_loading();
         create_track_index(center_slide.slide_index);
         if (pf_tracks.count == 0)
@@ -4452,9 +4454,11 @@ static bool track_list_ready(void)
 {
     if (pf_state != pf_show_tracks)
     {
+        if (rb->global_settings->storage_mode != 2
 #ifdef HAVE_TC_RAMCACHE
-        if (!rb->tagcache_is_in_ram())
+            && !rb->tagcache_is_in_ram()
 #endif
+        )
             rb->splash(0, ID2P(LANG_WAIT));
         create_track_index(center_slide.slide_index);
         if (pf_tracks.count == 0)
@@ -5041,13 +5045,17 @@ static int pictureflow_main(void)
             case pf_cover_in:
                 update_cover_in_animation();
                 render_all_slides();
+                if (center_slide.slide_index != pf_tracks.cur_idx
+                    && (rb->global_settings->storage_mode == 2
 #ifdef HAVE_TC_RAMCACHE
-                if (rb->tagcache_is_in_ram()
-                    && center_slide.slide_index != pf_tracks.cur_idx)
+                        || rb->tagcache_is_in_ram()
+#endif
+                    ))
                 {
                     create_track_index(center_slide.slide_index);
+                    if (pf_tracks.count > 0)
+                        reset_track_list();
                 }
-#endif
                 break;
             case pf_cover_out:
                 show_tracks_while_browsing = false;
