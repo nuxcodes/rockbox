@@ -2982,13 +2982,13 @@ static void audio_on_track_changed(void)
 static void audio_start_playback(const struct audio_resume_info *resume_info,
                                  unsigned int flags)
 {
-/* 
- * Refuse to start playback if usb audio is active. See gui_wps_show() for
- * a splash message to the user.
+/*
+ * Refuse to start playback if usb audio SINK is active (iPod receiving audio).
+ * Source mode (iPod streaming to external DAC) needs playback to continue.
  * NOTE: if USBAudio ever gets its own DSP channel, this block can go away!
  */
 #ifdef USB_ENABLE_AUDIO
-    if (usb_audio_get_active())
+    if (usb_audio_get_active() && usb_audio_get_playing())
     {
         queue_reply(&audio_queue, 0);
         return;

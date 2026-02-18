@@ -248,6 +248,9 @@ static void iap_hid_process_rx(const unsigned char *data, int len)
     if (payload_len > len - 1)
         payload_len = len - 1;
 
+    logf("iap_hid: rx id=%d len=%d first=0x%02x",
+         report_id, payload_len, data[1]);
+
     /* feed payload bytes to iAP parser (skip report ID byte) */
     for (i = 0; i < payload_len; i++)
     {
