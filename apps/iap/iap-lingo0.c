@@ -1130,6 +1130,103 @@ void iap_handlepkt_mode0(const unsigned int len, const unsigned char *buf)
             break;
         }
 
+        /* StartIDPS (0x38)
+         *
+         * Newer accessories use the Identification Protocol Session (IDPS)
+         * instead of IdentifyDeviceLingoes. The HA-2SE sends this.
+         *
+         * Packet format:
+         * 0x00: Lingo ID, always 0x00
+         * 0x01: Command, always 0x38
+         * 0x02-0x03: Reserved / transaction ID
+         *
+         * Returns: IAP_ACK_OK
+         */
+        case 0x38:
+        {
+            logf("iap: StartIDPS");
+            cmd_ok(cmd);
+            break;
+        }
+
+        /* SetFIDTokenValues (0x39)
+         *
+         * Accessory sends FID tokens describing its capabilities.
+         * We accept all tokens without inspecting them.
+         * The proper response is RetFIDTokenValueACKs (0x3A).
+         *
+         * Packet format:
+         * 0x00: Lingo ID, always 0x00
+         * 0x01: Command, always 0x39
+         * 0x02: Number of FID token values
+         * 0x03+: FID token data (type, subtype, length, value)
+         */
+        case 0x39:
+        {
+            logf("iap: SetFIDTokenValues n=%d", (len > 2) ? buf[2] : 0);
+
+            /* Respond with RetFIDTokenValueACKs (0x3A)
+             * For each token, send: type(1) subtype(1) status(1)=0x00 (OK)
+             * Parse the FID tokens from the request to echo back types */
+            {
+                int num_tokens = (len > 2) ? buf[2] : 0;
+                int offset = 3; /* start of first FID token in buf */
+                int i;
+
+                IAP_TX_INIT(0x00, 0x3A);
+                IAP_TX_PUT(num_tokens);
+
+                for (i = 0; i < num_tokens && offset + 2 < (int)len; i++)
+                {
+                    uint8_t fid_type = buf[offset];
+                    uint8_t fid_subtype = buf[offset + 1];
+                    uint8_t fid_len = (offset + 2 < (int)len) ? buf[offset + 2] : 0;
+
+                    IAP_TX_PUT(fid_type);
+                    IAP_TX_PUT(fid_subtype);
+                    IAP_TX_PUT(0x00); /* status: accepted */
+
+                    /* skip over this token's data:
+                     * 1 (type) + 1 (subtype) + 1 (length) + fid_len (data) */
+                    offset += 3 + fid_len;
+                }
+
+                iap_send_tx();
+            }
+            break;
+        }
+
+        /* EndIDPS (0x3B)
+         *
+         * Signals end of the IDPS session. We accept it and trigger
+         * device identification as if IdentifyDeviceLingoes was used.
+         *
+         * Packet format:
+         * 0x00: Lingo ID, always 0x00
+         * 0x01: Command, always 0x3B
+         * 0x02: IDPS status (0x00 = OK)
+         */
+        case 0x3B:
+        {
+            uint8_t idps_status = (len > 2) ? buf[2] : 0;
+            logf("iap: EndIDPS status=%d", idps_status);
+
+            /* Accept the IDPS result */
+            cmd_ok(cmd);
+
+            if (idps_status == 0x00)
+            {
+                /* IDPS succeeded — set up device as if IdentifyDeviceLingoes
+                 * was received. Default to lingo 0 (general) support.
+                 * Authentication will be handled by the periodic handler. */
+                iap_reset_device(&device);
+                device.lingoes = 1; /* at minimum, lingo 0 */
+                device.do_power_notify = true;
+                device.auth.state = AUST_INIT;
+            }
+            break;
+        }
+
         /* The default response is IAP_ACK_BAD_PARAM */
         default:
         {
