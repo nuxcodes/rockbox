@@ -1132,97 +1132,136 @@ void iap_handlepkt_mode0(const unsigned int len, const unsigned char *buf)
 
         /* StartIDPS (0x38)
          *
-         * Newer accessories use the Identification Protocol Session (IDPS)
-         * instead of IdentifyDeviceLingoes. The HA-2SE sends this.
+         * Newer accessories use IDPS instead of IdentifyDeviceLingoes.
+         * All IDPS commands include 2-byte transaction IDs after the
+         * command byte. Responses MUST echo the same transaction ID.
          *
          * Packet format:
          * 0x00: Lingo ID, always 0x00
          * 0x01: Command, always 0x38
-         * 0x02-0x03: Reserved / transaction ID
+         * 0x02-0x03: Transaction ID
          *
-         * Returns: IAP_ACK_OK
+         * Returns: iPodAck with transID, status=OK
          */
         case 0x38:
         {
-            logf("iap: StartIDPS");
-            cmd_ok(cmd);
+            CHECKLEN(4);
+            uint8_t tid_hi = buf[2];
+            uint8_t tid_lo = buf[3];
+            logf("iap: StartIDPS tid=%02x%02x", tid_hi, tid_lo);
+
+            /* iPodAck with transaction ID: format per Table 3-5 */
+            IAP_TX_INIT(0x00, 0x02);
+            IAP_TX_PUT(tid_hi);
+            IAP_TX_PUT(tid_lo);
+            IAP_TX_PUT(IAP_ACK_OK);
+            IAP_TX_PUT(cmd);
+            iap_send_tx();
             break;
         }
 
         /* SetFIDTokenValues (0x39)
          *
          * Accessory sends FID tokens describing its capabilities.
-         * We accept all tokens without inspecting them.
-         * The proper response is RetFIDTokenValueACKs (0x3A).
+         * Respond with RetFIDTokenValueACKs (0x3A) accepting all tokens.
          *
          * Packet format:
          * 0x00: Lingo ID, always 0x00
          * 0x01: Command, always 0x39
-         * 0x02: Number of FID token values
-         * 0x03+: FID token data (type, subtype, length, value)
+         * 0x02-0x03: Transaction ID
+         * 0x04: Number of FID token values
+         * 0x05+: FID token data (type, subtype, length, value)
          */
         case 0x39:
         {
-            logf("iap: SetFIDTokenValues n=%d", (len > 2) ? buf[2] : 0);
+            CHECKLEN(5);
+            uint8_t tid_hi = buf[2];
+            uint8_t tid_lo = buf[3];
+            int num_tokens = buf[4];
+            int offset = 5; /* start of first FID token in buf */
+            int i;
 
-            /* Respond with RetFIDTokenValueACKs (0x3A)
-             * For each token, send: type(1) subtype(1) status(1)=0x00 (OK)
-             * Parse the FID tokens from the request to echo back types */
+            logf("iap: SetFIDTokenValues tid=%02x%02x n=%d",
+                 tid_hi, tid_lo, num_tokens);
+
+            /* RetFIDTokenValueACKs (0x3A) with transID */
+            IAP_TX_INIT(0x00, 0x3A);
+            IAP_TX_PUT(tid_hi);
+            IAP_TX_PUT(tid_lo);
+            IAP_TX_PUT(num_tokens);
+
+            for (i = 0; i < num_tokens && offset + 2 < (int)len; i++)
             {
-                int num_tokens = (len > 2) ? buf[2] : 0;
-                int offset = 3; /* start of first FID token in buf */
-                int i;
+                uint8_t fid_type = buf[offset];
+                uint8_t fid_subtype = buf[offset + 1];
+                uint8_t fid_len = (offset + 2 < (int)len) ? buf[offset + 2] : 0;
 
-                IAP_TX_INIT(0x00, 0x3A);
-                IAP_TX_PUT(num_tokens);
+                IAP_TX_PUT(fid_type);
+                IAP_TX_PUT(fid_subtype);
+                IAP_TX_PUT(0x00); /* status: accepted */
 
-                for (i = 0; i < num_tokens && offset + 2 < (int)len; i++)
-                {
-                    uint8_t fid_type = buf[offset];
-                    uint8_t fid_subtype = buf[offset + 1];
-                    uint8_t fid_len = (offset + 2 < (int)len) ? buf[offset + 2] : 0;
-
-                    IAP_TX_PUT(fid_type);
-                    IAP_TX_PUT(fid_subtype);
-                    IAP_TX_PUT(0x00); /* status: accepted */
-
-                    /* skip over this token's data:
-                     * 1 (type) + 1 (subtype) + 1 (length) + fid_len (data) */
-                    offset += 3 + fid_len;
-                }
-
-                iap_send_tx();
+                /* skip: type(1) + subtype(1) + length(1) + data(fid_len) */
+                offset += 3 + fid_len;
             }
+
+            iap_send_tx();
             break;
         }
 
         /* EndIDPS (0x3B)
          *
-         * Signals end of the IDPS session. We accept it and trigger
-         * device identification as if IdentifyDeviceLingoes was used.
+         * End of IDPS session. Response is IDPSStatus (0x3C) with transID.
+         * Then start authentication.
          *
          * Packet format:
          * 0x00: Lingo ID, always 0x00
          * 0x01: Command, always 0x3B
-         * 0x02: IDPS status (0x00 = OK)
+         * 0x02-0x03: Transaction ID
+         * 0x04: AccEndIDPSStatus (0x00=Continue, 0x01=Reset, 0x02=Abandon)
          */
         case 0x3B:
         {
-            uint8_t idps_status = (len > 2) ? buf[2] : 0;
-            logf("iap: EndIDPS status=%d", idps_status);
+            CHECKLEN(5);
+            uint8_t tid_hi = buf[2];
+            uint8_t tid_lo = buf[3];
+            uint8_t idps_status = buf[4];
+            logf("iap: EndIDPS tid=%02x%02x status=%d",
+                 tid_hi, tid_lo, idps_status);
 
-            /* Accept the IDPS result */
-            cmd_ok(cmd);
-
-            if (idps_status == 0x00)
+            if (idps_status == 0x00) /* AccEndIDPSStatusContinue */
             {
-                /* IDPS succeeded — set up device as if IdentifyDeviceLingoes
-                 * was received. Default to lingo 0 (general) support.
-                 * Authentication will be handled by the periodic handler. */
+                /* IDPSStatus (0x3C) with transID = OK */
+                IAP_TX_INIT(0x00, 0x3C);
+                IAP_TX_PUT(tid_hi);
+                IAP_TX_PUT(tid_lo);
+                IAP_TX_PUT(0x00); /* IDPSStatusOK */
+                iap_send_tx();
+
+                /* Set up device and start auth */
                 iap_reset_device(&device);
-                device.lingoes = 1; /* at minimum, lingo 0 */
+                device.lingoes = 1;
                 device.do_power_notify = true;
                 device.auth.state = AUST_INIT;
+
+                /* GetAccessoryAuthenticationInfo (0x14) */
+                IAP_TX_INIT(0x00, 0x14);
+                iap_send_tx();
+            }
+            else if (idps_status == 0x01) /* Reset */
+            {
+                IAP_TX_INIT(0x00, 0x3C);
+                IAP_TX_PUT(tid_hi);
+                IAP_TX_PUT(tid_lo);
+                IAP_TX_PUT(0x02); /* TimeLimitNotExceeded */
+                iap_send_tx();
+            }
+            else /* Abandon or unknown */
+            {
+                IAP_TX_INIT(0x00, 0x3C);
+                IAP_TX_PUT(tid_hi);
+                IAP_TX_PUT(tid_lo);
+                IAP_TX_PUT(0x03); /* WillNotAccept */
+                iap_send_tx();
             }
             break;
         }

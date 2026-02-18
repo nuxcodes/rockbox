@@ -210,9 +210,21 @@ static void iap_hid_tx(const unsigned char *buf, int len)
     /* build the HID report: [Report ID] [payload...] [zero padding] */
     tx_buf[0] = report_id;
     memcpy(tx_buf + 1, buf, len);
+
+    /* iAP over USB HID: replace the 0xFF serial sync byte with 0x00
+     * to match the HID transport format the accessory expects. */
+    if (len > 0 && tx_buf[1] == 0xFF)
+        tx_buf[1] = 0x00;
+
     /* zero-pad the rest */
     if (len < report_size)
         memset(tx_buf + 1 + len, 0, report_size - len);
+
+    logf("iap_hid: tx id=%d len=%d [%02x %02x %02x %02x %02x %02x]",
+         report_id, len,
+         tx_buf[0], tx_buf[1], tx_buf[2],
+         (len > 2) ? tx_buf[3] : 0, (len > 3) ? tx_buf[4] : 0,
+         (len > 4) ? tx_buf[5] : 0);
 
     usb_drv_send_nonblocking(EP_IAP_HID_IN, tx_buf, 1 + report_size);
 }
