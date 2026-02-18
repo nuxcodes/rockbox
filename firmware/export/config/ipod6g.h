@@ -259,6 +259,7 @@
 #endif
 #else /* !BOOTLOADER */
 #define HAVE_SERIAL
+#define ROCKBOX_HAS_LOGF
 /* Disable iAP when LOGF_SERIAL is enabled to avoid conflicts */
 #ifndef LOGF_SERIAL
 #define IPOD_ACCESSORY_PROTOCOL
