@@ -979,11 +979,14 @@ static void request_handler_device(struct usb_ctrlrequest* req, void* reqdata)
         default:
         {
             /* Try forwarding to active class drivers (e.g. Apple vendor
-             * request 0x40) before giving up with a STALL */
+             * request 0x40) before giving up with a STALL.
+             * Use .enabled instead of is_active() because Apple MFi
+             * accessories send vendor requests BEFORE SET_CONFIGURATION,
+             * when usb_config is still 0 and no driver is "active" yet. */
             bool handled = false;
             int i;
             for(i = 0; i < USB_NUM_DRIVERS; i++) {
-                if(is_active(drivers[i]) && drivers[i].control_request != NULL &&
+                if(drivers[i].enabled && drivers[i].control_request != NULL &&
                    drivers[i].control_request(req, reqdata, response_data)) {
                     handled = true;
                     break;
