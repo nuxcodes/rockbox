@@ -1661,8 +1661,8 @@ Information for them was gathered solely by reverse-engineering Apple's firmware
 /* 7 available EPs (0b00000000011101010000000001101011), 6 used */
 #define USB_NUM_ENDPOINTS 6
 #elif CONFIG_CPU==S5L8702 || CONFIG_CPU==S5L8720
-/* 9 available EPs (0b00000001111101010000000111101011), 6 used */
-#define USB_NUM_ENDPOINTS 6
+/* 9 available EPs (0b00000001111101010000000111101011), 7 used */
+#define USB_NUM_ENDPOINTS 7
 #endif
 
 #if CONFIG_CPU==S5L8701

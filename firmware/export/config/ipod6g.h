@@ -239,6 +239,7 @@
 //#define USB_ENABLE_SERIAL
 #define HAVE_USBSTACK
 #define HAVE_USB_HID_MOUSE
+#define USB_ENABLE_IAP_HID
 #define USB_VENDOR_ID 0x05AC
 #define USB_PRODUCT_ID 0x1261
 #define USB_DEVBSS_ATTR __attribute__((aligned(32)))

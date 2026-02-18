@@ -42,6 +42,9 @@ extern void iap_periodic(void);
 extern void iap_handlepkt(void);
 extern void iap_send_pkt(const unsigned char * data, int len);
 const unsigned char *iap_get_serbuf(void);
+
+/* Transport abstraction — USB HID driver overrides this for iAP-over-USB */
+extern void (*iap_transport_send)(const unsigned char *buf, int len);
 #ifdef HAVE_LINE_REC
 extern bool iap_record(bool onoff);
 #endif

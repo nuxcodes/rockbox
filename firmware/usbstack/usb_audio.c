@@ -67,16 +67,26 @@ static struct usb_interface_descriptor
     .iInterface         = 0
 };
 
-/* Audio Control Terminals/Units*/
-static struct usb_ac_header ac_header =
+/* Audio Control Terminals/Units */
+/* Use concrete struct since we need space for 2 interface numbers
+ * (playback sink AS + source AS) */
+static struct {
+    uint8_t  bLength;
+    uint8_t  bDescriptorType;
+    uint8_t  bDescriptorSubType;
+    uint16_t bcdADC;
+    uint16_t wTotalLength;
+    uint8_t  bInCollection;
+    uint8_t  baInterfaceNr[2];
+} __attribute__ ((packed)) ac_header =
 {
-    .bLength            = USB_AC_SIZEOF_HEADER(1), /* one interface */
+    .bLength            = USB_AC_SIZEOF_HEADER(2), /* two streaming interfaces */
     .bDescriptorType    = USB_DT_CS_INTERFACE,
     .bDescriptorSubType = USB_AC_HEADER,
     .bcdADC             = 0x0100, /* Identifies this as usb audio class 1.0 */
     .wTotalLength       = 0, /* fill later */
-    .bInCollection      = 1, /* one interface */
-    .baInterfaceNr      = {0}, /* fill later */
+    .bInCollection      = 2, /* two streaming interfaces */
+    .baInterfaceNr      = {0, 0}, /* fill later */
 };
 
 enum
@@ -84,6 +94,8 @@ enum
     AC_PLAYBACK_INPUT_TERMINAL_ID = 1,
     AC_PLAYBACK_FEATURE_ID,
     AC_PLAYBACK_OUTPUT_TERMINAL_ID,
+    AC_SOURCE_INPUT_TERMINAL_ID,
+    AC_SOURCE_OUTPUT_TERMINAL_ID,
 };
 
 static struct usb_ac_input_terminal ac_playback_input =
@@ -129,6 +141,33 @@ static struct usb_ac_feature_unit_8_2 ac_playback_feature =
         [2] = 0
     },
     .iFeature = 0
+};
+
+/* Source direction: audio FROM the iPod TO the USB host (for external DACs) */
+static struct usb_ac_input_terminal ac_source_input =
+{
+    .bLength            = sizeof(struct usb_ac_input_terminal),
+    .bDescriptorType    = USB_DT_CS_INTERFACE,
+    .bDescriptorSubType = USB_AC_INPUT_TERMINAL,
+    .bTerminalId        = AC_SOURCE_INPUT_TERMINAL_ID,
+    .wTerminalType      = USB_AC_INPUT_TERMINAL_MICROPHONE, /* matches Apple layout */
+    .bAssocTerminal     = AC_SOURCE_OUTPUT_TERMINAL_ID,
+    .bNrChannels        = 2,
+    .wChannelConfig     = USB_AC_CHANNELS_LEFT_RIGHT_FRONT,
+    .iChannelNames      = 0,
+    .iTerminal          = 0,
+};
+
+static struct usb_ac_output_terminal ac_source_output =
+{
+    .bLength            = sizeof(struct usb_ac_output_terminal),
+    .bDescriptorType    = USB_DT_CS_INTERFACE,
+    .bDescriptorSubType = USB_AC_OUTPUT_TERMINAL,
+    .bTerminalId        = AC_SOURCE_OUTPUT_TERMINAL_ID,
+    .wTerminalType      = USB_AC_TERMINAL_STREAMING, /* to USB host */
+    .bAssocTerminal     = AC_SOURCE_INPUT_TERMINAL_ID,
+    .bSourceId          = AC_SOURCE_INPUT_TERMINAL_ID, /* direct: no feature unit */
+    .iTerminal          = 0,
 };
 
 /* Audio Streaming Interface */
@@ -256,12 +295,100 @@ static struct usb_as_iso_ctrldata_endpoint
     .wLockDelay         = 0 /* undefined */
 };
 
+/* ===== Source Audio Streaming Interface (iPod -> USB host) ===== */
+
+/* Alternative: no streaming */
+static struct usb_interface_descriptor
+    as_interface_alt_idle_source =
+{
+    .bLength            = sizeof(struct usb_interface_descriptor),
+    .bDescriptorType    = USB_DT_INTERFACE,
+    .bInterfaceNumber   = 0, /* filled later */
+    .bAlternateSetting  = 0,
+    .bNumEndpoints      = 0,
+    .bInterfaceClass    = USB_CLASS_AUDIO,
+    .bInterfaceSubClass = USB_SUBCLASS_AUDIO_STREAMING,
+    .bInterfaceProtocol = 0,
+    .iInterface         = 0
+};
+
+/* Alternative: input streaming (one ISO IN data endpoint) */
+static struct usb_interface_descriptor
+    as_interface_alt_source =
+{
+    .bLength            = sizeof(struct usb_interface_descriptor),
+    .bDescriptorType    = USB_DT_INTERFACE,
+    .bInterfaceNumber   = 0, /* filled later */
+    .bAlternateSetting  = 1,
+    .bNumEndpoints      = 1, /* iso audio IN only */
+    .bInterfaceClass    = USB_CLASS_AUDIO,
+    .bInterfaceSubClass = USB_SUBCLASS_AUDIO_STREAMING,
+    .bInterfaceProtocol = 0,
+    .iInterface         = 0
+};
+
+/* Class Specific Audio Streaming Interface (source) */
+static struct usb_as_interface
+    as_source_cs_interface =
+{
+    .bLength            = sizeof(struct usb_as_interface),
+    .bDescriptorType    = USB_DT_CS_INTERFACE,
+    .bDescriptorSubType = USB_AS_GENERAL,
+    .bTerminalLink      = AC_SOURCE_OUTPUT_TERMINAL_ID,
+    .bDelay             = 1,
+    .wFormatTag         = USB_AS_FORMAT_TYPE_I_PCM
+};
+
+static struct usb_as_format_type_i_discrete
+    as_source_format_type_i =
+{
+    .bLength            = USB_AS_SIZEOF_FORMAT_TYPE_I_DISCRETE(HW_NUM_FREQ),
+    .bDescriptorType    = USB_DT_CS_INTERFACE,
+    .bDescriptorSubType = USB_AS_FORMAT_TYPE,
+    .bFormatType        = USB_AS_FORMAT_TYPE_I,
+    .bNrChannels        = 2, /* Stereo */
+    .bSubframeSize      = 2, /* 2 bytes per sample */
+    .bBitResolution     = 16,
+    .bSamFreqType       = HW_NUM_FREQ,
+    .tSamFreq           = {
+        [0 ... HW_NUM_FREQ - 1] = {0}, /* filled later */
+    }
+};
+
+/* ISO IN data endpoint for source audio (no sync — matches Apple layout) */
+static struct usb_as_iso_audio_endpoint
+    as_iso_audio_in_ep =
+{
+    .bLength          = sizeof(struct usb_as_iso_audio_endpoint),
+    .bDescriptorType  = USB_DT_ENDPOINT,
+    .bEndpointAddress = USB_DIR_IN, /* filled later */
+    .bmAttributes     = USB_ENDPOINT_XFER_ISOC | USB_ENDPOINT_SYNC_NONE | USB_ENDPOINT_USAGE_DATA,
+    .wMaxPacketSize   = 192, /* 48000 Hz * 2ch * 2bytes / 1000 */
+    .bInterval        = 0, /* filled later */
+    .bRefresh         = 0,
+    .bSynchAddress    = 0
+};
+
+/* Class-Specific AS ISO Data Endpoint for source */
+static struct usb_as_iso_ctrldata_endpoint
+    as_iso_ctrldata_source_samfreq =
+{
+    .bLength            = sizeof(struct usb_as_iso_ctrldata_endpoint),
+    .bDescriptorType    = USB_DT_CS_ENDPOINT,
+    .bDescriptorSubType = USB_AS_EP_GENERAL,
+    .bmAttributes       = USB_AS_EP_CS_SAMPLING_FREQ_CTL,
+    .bLockDelayUnits    = 0,
+    .wLockDelay         = 0
+};
+
 static const struct usb_descriptor_header* const ac_cs_descriptors_list[] =
 {
     (struct usb_descriptor_header *) &ac_header,
     (struct usb_descriptor_header *) &ac_playback_input,
     (struct usb_descriptor_header *) &ac_playback_feature,
     (struct usb_descriptor_header *) &ac_playback_output,
+    (struct usb_descriptor_header *) &ac_source_input,
+    (struct usb_descriptor_header *) &ac_source_output,
 };
 
 #define AC_CS_DESCRIPTORS_LIST_SIZE (sizeof(ac_cs_descriptors_list)/sizeof(ac_cs_descriptors_list[0]))
@@ -276,7 +403,9 @@ static const struct usb_descriptor_header* const usb_descriptors_list[] =
     (struct usb_descriptor_header *) &ac_playback_input,
     (struct usb_descriptor_header *) &ac_playback_feature,
     (struct usb_descriptor_header *) &ac_playback_output,
-    /* Audio Streaming */
+    (struct usb_descriptor_header *) &ac_source_input,
+    (struct usb_descriptor_header *) &ac_source_output,
+    /* Audio Streaming - Playback (sink: host -> iPod) */
     /*   Idle Playback */
     (struct usb_descriptor_header *) &as_interface_alt_idle_playback,
     /*   Playback */
@@ -288,24 +417,38 @@ static const struct usb_descriptor_header* const usb_descriptors_list[] =
     (struct usb_descriptor_header *) &as_iso_ctrldata_samfreq,
     (struct usb_descriptor_header *) &as_iso_audio_out_ep,
     (struct usb_descriptor_header *) &as_iso_synch_in_ep,
+    /* Audio Streaming - Source (iPod -> host, for external DAC) */
+    /*   Idle Source */
+    (struct usb_descriptor_header *) &as_interface_alt_idle_source,
+    /*   Source */
+    (struct usb_descriptor_header *) &as_interface_alt_source,
+    (struct usb_descriptor_header *) &as_source_cs_interface,
+    (struct usb_descriptor_header *) &as_source_format_type_i,
+    (struct usb_descriptor_header *) &as_iso_audio_in_ep,
+    (struct usb_descriptor_header *) &as_iso_ctrldata_source_samfreq,
 };
 
 #define USB_DESCRIPTORS_LIST_SIZE (sizeof(usb_descriptors_list)/sizeof(usb_descriptors_list[0]))
 
 static int usb_interface; /* first interface */
 static int usb_as_playback_intf_alt; /* playback streaming interface alternate setting */
+static int usb_as_source_intf_alt; /* source streaming interface alternate setting */
 
 static int as_playback_freq_idx; /* audio playback streaming frequency index (in hw_freq_sampr) */
+static int as_source_freq_idx; /* audio source streaming frequency index (in hw_freq_sampr) */
 
-struct usb_class_driver_ep_allocation usb_audio_ep_allocs[2] = {
-    /* output isochronous endpoint */
+struct usb_class_driver_ep_allocation usb_audio_ep_allocs[3] = {
+    /* output isochronous endpoint (sink: host -> iPod) */
     {.type = USB_ENDPOINT_XFER_ISOC, .dir = DIR_OUT, .optional = false},
-    /* input feedback isochronous endpoint */
+    /* input feedback isochronous endpoint (for sink async mode) */
+    {.type = USB_ENDPOINT_XFER_ISOC, .dir = DIR_IN, .optional = false},
+    /* input isochronous endpoint (source: iPod -> host) */
     {.type = USB_ENDPOINT_XFER_ISOC, .dir = DIR_IN, .optional = false},
 };
 
 #define EP_ISO_OUT (usb_audio_ep_allocs[0].ep)
 #define EP_ISO_FEEDBACK_IN (usb_audio_ep_allocs[1].ep)
+#define EP_ISO_SOURCE_IN (usb_audio_ep_allocs[2].ep)
 
 /* small buffer used for control transfers */
 static unsigned char usb_buffer[128] USB_DEVBSS_ATTR;
@@ -408,6 +551,23 @@ static int frames_dropped = 0;
 /* for blocking normal playback */
 static bool usbaudio_active = false;
 
+/* ===== Source mode (iPod -> USB host) TX ring buffer ===== */
+/* Max bytes per USB frame: 48000Hz * 2ch * 2bytes / 1000 = 192 bytes */
+#define TX_FRAME_SIZE 192
+/* Ring buffer size: enough for ~64ms of audio at 48kHz */
+#define TX_RING_SIZE (TX_FRAME_SIZE * 64)
+static unsigned char *tx_ring_buf;
+static int tx_ring_buf_handle;
+static volatile int tx_write_pos; /* byte offset, updated by buffer hook */
+static volatile int tx_read_pos;  /* byte offset, updated by ISO IN completion */
+static bool source_streaming = false;
+/* Fractional sample accumulator for non-integer sample rates (e.g. 44.1kHz).
+ * At 44.1kHz, we need 44.1 samples/frame. We track the fractional remainder
+ * and send an extra sample every 10th frame (9x44 + 1x45 = 441 per 10ms). */
+static int source_frac_num;  /* accumulated fractional numerator */
+static unsigned char tx_send_buf[TX_FRAME_SIZE] USB_DEVBSS_ATTR;
+static unsigned char silence_buf[TX_FRAME_SIZE] USB_DEVBSS_ATTR;
+
 /* Schematic view of the RX situation:
  * (in case NR_BUFFERS = 4)
  *
@@ -507,18 +667,28 @@ void usb_audio_init(void)
     unsigned int i;
     /* initialized tSamFreq array */
     logf("usbaudio: (init) supported frequencies");
-    // only values 44.1k and higher (array is in descending order)
+    /* playback: only values 44.1k and higher (array is in descending order) */
     for(i = 0; i <= HW_FREQ_44; i++)
     {
-        logf("usbaudio: %lu Hz", hw_freq_sampr[i]);
+        logf("usbaudio: playback %lu Hz", hw_freq_sampr[i]);
         encode3(as_playback_format_type_i.tSamFreq[i], hw_freq_sampr[i]);
+    }
+    /* source: all hardware-supported rates in ascending order (matches Apple layout) */
+    for(i = 0; i < HW_NUM_FREQ; i++)
+    {
+        /* hw_freq_sampr is descending; reverse into ascending for Apple compatibility */
+        int src_idx = HW_NUM_FREQ - 1 - i;
+        logf("usbaudio: source %lu Hz", hw_freq_sampr[src_idx]);
+        encode3(as_source_format_type_i.tSamFreq[i], hw_freq_sampr[src_idx]);
     }
 }
 
 int usb_audio_request_buf(void)
 {
-    // stop playback first thing
-    audio_stop();
+    /* In config 2 (DAC mode), playback must continue — source mode streams it.
+     * In config 1 (PC mode), audio is not active so this is not called.
+     * audio_stop() is not needed here; the SYS_USB_CONNECTED broadcast
+     * handles playback shutdown when mass storage takes exclusive access. */
 
     // attempt to allocate the receive buffers
     rx_buffer_handle = core_alloc(REAL_BUF_SIZE);
@@ -554,6 +724,24 @@ int usb_audio_request_buf(void)
 
         dsp_buf = core_get_data(dsp_buf_handle);
     }
+
+    /* allocate TX ring buffer for source mode */
+    tx_ring_buf_handle = core_alloc(TX_RING_SIZE);
+    if (tx_ring_buf_handle < 0)
+    {
+        alloc_failed = true;
+        rx_buffer_handle = core_free(rx_buffer_handle);
+        rx_buffer = NULL;
+        dsp_buf_handle = core_free(dsp_buf_handle);
+        dsp_buf = NULL;
+        return -1;
+    }
+    else
+    {
+        core_pin(tx_ring_buf_handle);
+        tx_ring_buf = core_get_data(tx_ring_buf_handle);
+    }
+
     // logf("usbaudio: got buffer");
     return 0;
 }
@@ -566,6 +754,9 @@ void usb_audio_free_buf(void)
 
     dsp_buf_handle = core_free(dsp_buf_handle);
     dsp_buf = NULL;
+
+    tx_ring_buf_handle = core_free(tx_ring_buf_handle);
+    tx_ring_buf = NULL;
 }
 
 unsigned int usb_audio_get_out_ep(void)
@@ -582,7 +773,7 @@ int usb_audio_set_first_interface(int interface)
 {
     usb_interface = interface;
     logf("usbaudio: usb_interface=%d", usb_interface);
-    return interface + 2; /* Audio Control and Audio Streaming */
+    return interface + 3; /* Audio Control, Playback Streaming, Source Streaming */
 }
 
 int usb_audio_get_config_descriptor(unsigned char *dest, int max_packet_size)
@@ -597,6 +788,7 @@ int usb_audio_get_config_descriptor(unsigned char *dest, int max_packet_size)
 
     /* header */
     ac_header.baInterfaceNr[0] = usb_interface + 1;
+    ac_header.baInterfaceNr[1] = usb_interface + 2;
 
     /* audio control interface */
     ac_interface.bInterfaceNumber = usb_interface;
@@ -606,16 +798,23 @@ int usb_audio_get_config_descriptor(unsigned char *dest, int max_packet_size)
     for(i = 0; i < AC_CS_DESCRIPTORS_LIST_SIZE; i++)
         ac_header.wTotalLength += ac_cs_descriptors_list[i]->bLength;
 
-    /* audio streaming */
+    /* audio streaming - playback (sink) */
     as_interface_alt_idle_playback.bInterfaceNumber = usb_interface + 1;
     as_interface_alt_playback.bInterfaceNumber = usb_interface + 1;
 
-    /* endpoints */
+    /* audio streaming - source */
+    as_interface_alt_idle_source.bInterfaceNumber = usb_interface + 2;
+    as_interface_alt_source.bInterfaceNumber = usb_interface + 2;
+
+    /* endpoints - playback (sink) */
     as_iso_audio_out_ep.wMaxPacketSize = 1023;
     as_iso_audio_out_ep.bEndpointAddress = EP_ISO_OUT;
     as_iso_audio_out_ep.bSynchAddress = EP_ISO_FEEDBACK_IN;
     as_iso_synch_in_ep.bEndpointAddress = EP_ISO_FEEDBACK_IN;
     as_iso_synch_in_ep.bSynchAddress = 0;
+
+    /* endpoints - source */
+    as_iso_audio_in_ep.bEndpointAddress = EP_ISO_SOURCE_IN;
 
     /** Endpoint Interval calculation:
      * typically sampling frequency is 44100 Hz and top is 192000 Hz, which
@@ -630,6 +829,7 @@ int usb_audio_get_config_descriptor(unsigned char *dest, int max_packet_size)
      */
     as_iso_audio_out_ep.bInterval = usb_drv_port_speed() ? 4 : 1;
     as_iso_synch_in_ep.bInterval = usb_drv_port_speed() ? 4 : 1; // per spec
+    as_iso_audio_in_ep.bInterval = usb_drv_port_speed() ? 4 : 1;
 
     logf("usbaudio: port_speed=%s", usb_drv_port_speed()?"hs":"fs");
 
@@ -723,6 +923,103 @@ static void usb_audio_stop_playback(void)
     send_fb = false;
 }
 
+/* ===== Source mode (iPod -> USB host) ===== */
+
+/*
+ * Compute number of bytes to send in this USB frame.
+ * Handles non-integer sample rates (e.g. 44100 Hz / 1000 = 44.1 samples/frame)
+ * using a fractional accumulator. This matches ipod-gadget's approach:
+ * at 44.1kHz, sends 9 frames of 44 samples + 1 frame of 45 samples = 44100/sec.
+ */
+static int source_frame_bytes(void)
+{
+    unsigned long freq = hw_freq_sampr[as_source_freq_idx];
+    int base_samples = freq / 1000;
+    int remainder = freq % 1000; /* fractional part per frame (e.g. 100 for 44100) */
+    int samples;
+
+    source_frac_num += remainder;
+    if (source_frac_num >= 1000)
+    {
+        source_frac_num -= 1000;
+        samples = base_samples + 1;
+    }
+    else
+    {
+        samples = base_samples;
+    }
+
+    return samples * 4; /* stereo 16-bit: 2 channels * 2 bytes */
+}
+
+static void set_source_sampling_frequency(unsigned long f)
+{
+    for(int i = 0; i < HW_NUM_FREQ; i++)
+    {
+        int err = abs((long)hw_freq_sampr[i] - (long)f);
+        int best_err = abs((long)hw_freq_sampr[as_source_freq_idx] - (long)f);
+        if(err < best_err)
+            as_source_freq_idx = i;
+    }
+
+    logf("usbaudio: set source sampling frequency to %lu Hz for a requested %lu Hz",
+        hw_freq_sampr[as_source_freq_idx], f);
+}
+
+static void source_buffer_hook(const void *start, size_t size)
+{
+    if (!source_streaming || !tx_ring_buf)
+        return;
+
+    /* compute available space in ring buffer */
+    int write = tx_write_pos;
+    int read = tx_read_pos;
+    int space;
+    if (write >= read)
+        space = TX_RING_SIZE - (write - read) - 1;
+    else
+        space = read - write - 1;
+
+    int to_copy = MIN((int)size, space);
+    if (to_copy <= 0)
+        return;
+
+    const unsigned char *src = (const unsigned char *)start;
+
+    /* copy with wraparound */
+    int first = MIN(to_copy, TX_RING_SIZE - write);
+    memcpy(tx_ring_buf + write, src, first);
+    if (to_copy > first)
+        memcpy(tx_ring_buf, src + first, to_copy - first);
+
+    tx_write_pos = (write + to_copy) % TX_RING_SIZE;
+}
+
+static void usb_audio_start_source(void)
+{
+    logf("usbaudio: start source at %lu Hz", hw_freq_sampr[as_source_freq_idx]);
+    source_streaming = true;
+    tx_write_pos = 0;
+    tx_read_pos = 0;
+    source_frac_num = 0;
+    memset(silence_buf, 0, sizeof(silence_buf));
+    memset(tx_send_buf, 0, sizeof(tx_send_buf));
+
+    /* register hook to capture playback audio */
+    mixer_channel_set_buffer_hook(PCM_MIXER_CHAN_PLAYBACK, source_buffer_hook);
+
+    /* start the ISO IN chain with a silence frame */
+    int frame_bytes = source_frame_bytes();
+    usb_drv_send_nonblocking(EP_ISO_SOURCE_IN, silence_buf, frame_bytes);
+}
+
+static void usb_audio_stop_source(void)
+{
+    logf("usbaudio: stop source");
+    source_streaming = false;
+    mixer_channel_set_buffer_hook(PCM_MIXER_CHAN_PLAYBACK, NULL);
+}
+
 int usb_audio_set_interface(int intf, int alt)
 {
     if(intf == usb_interface)
@@ -752,6 +1049,23 @@ int usb_audio_set_interface(int intf, int alt)
 
         return 0;
     }
+    if(intf == (usb_interface + 2))
+    {
+        if(alt < 0 || alt > 1)
+        {
+            logf("usbaudio: source interface has no alternate %d", alt);
+            return -1;
+        }
+        usb_as_source_intf_alt = alt;
+
+        if(usb_as_source_intf_alt == 1)
+            usb_audio_start_source();
+        else
+            usb_audio_stop_source();
+        logf("usbaudio: use source alternate %d", alt);
+
+        return 0;
+    }
     else
     {
         logf("usbaudio: interface %d has no alternate", intf);
@@ -770,6 +1084,11 @@ int usb_audio_get_interface(int intf)
     {
         logf("usbaudio: playback interface alternate  is %d", usb_as_playback_intf_alt);
         return usb_as_playback_intf_alt;
+    }
+    else if(intf == (usb_interface + 2))
+    {
+        logf("usbaudio: source interface alternate is %d", usb_as_source_intf_alt);
+        return usb_as_source_intf_alt;
     }
     else
     {
@@ -857,12 +1176,57 @@ static bool usb_audio_as_ctrldata_endpoint_request(struct usb_ctrlrequest* req, 
     return true;
 }
 
+static bool usb_audio_source_endpoint_request(struct usb_ctrlrequest* req, void *reqdata)
+{
+    /* only support sampling frequency */
+    if(req->wValue != (USB_AS_EP_CS_SAMPLING_FREQ_CTL << 8))
+    {
+        logf("usbaudio: source ep only handles sampling frequency control");
+        return false;
+    }
+
+    switch(req->bRequest)
+    {
+        case USB_AC_SET_CUR:
+            if(req->wLength != 3)
+            {
+                usb_drv_control_response(USB_CONTROL_STALL, NULL, 0);
+                return true;
+            }
+            if (reqdata) {
+                set_source_sampling_frequency(decode3(reqdata));
+                usb_drv_control_response(USB_CONTROL_ACK, NULL, 0);
+                return true;
+            } else {
+                usb_drv_control_response(USB_CONTROL_RECEIVE, usb_buffer, 3);
+                return true;
+            }
+
+        case USB_AC_GET_CUR:
+            if(req->wLength != 3)
+            {
+                usb_drv_control_response(USB_CONTROL_STALL, NULL, 0);
+                return true;
+            }
+            encode3(usb_buffer, hw_freq_sampr[as_source_freq_idx]);
+            usb_drv_control_response(USB_CONTROL_ACK, usb_buffer, req->wLength);
+            return true;
+
+        default:
+            logf("usbaudio: unhandled source ep req 0x%x", req->bRequest);
+    }
+
+    return true;
+}
+
 static bool usb_audio_endpoint_request(struct usb_ctrlrequest* req, void *reqdata)
 {
     int ep = req->wIndex & 0xff;
 
     if(ep == EP_ISO_OUT)
         return usb_audio_as_ctrldata_endpoint_request(req, reqdata);
+    else if(ep == EP_ISO_SOURCE_IN)
+        return usb_audio_source_endpoint_request(req, reqdata);
     else
     {
         logf("usbaudio: unhandled ep req (ep=%d)", ep);
@@ -1181,6 +1545,14 @@ void usb_audio_init_connection(void)
     set_playback_sampling_frequency(HW_SAMPR_DEFAULT);
     tmp_saved_vol = sound_current(SOUND_VOLUME);
     usb_audio_playing = false;
+
+    /* source mode init */
+    usb_as_source_intf_alt = 0;
+    as_source_freq_idx = HW_FREQ_44; /* default to 44.1kHz */
+    source_streaming = false;
+    source_frac_num = 0;
+    tx_write_pos = 0;
+    tx_read_pos = 0;
 }
 
 void usb_audio_disconnect(void)
@@ -1191,6 +1563,7 @@ void usb_audio_disconnect(void)
         return;
 
     usb_audio_stop_playback();
+    usb_audio_stop_source();
     usb_audio_free_buf();
     usbaudio_active = false;
 }
@@ -1348,7 +1721,40 @@ bool usb_audio_fast_transfer_complete(int ep, int dir, int status, int length)
     {
         retval = false;
     }
-    
+
+    /* Source mode: handle ISO IN completion for audio data */
+    if(ep == EP_ISO_SOURCE_IN && source_streaming)
+    {
+        int frame_bytes = source_frame_bytes();
+
+        /* compute available data in ring buffer */
+        int write = tx_write_pos;
+        int read = tx_read_pos;
+        int available;
+        if (write >= read)
+            available = write - read;
+        else
+            available = TX_RING_SIZE - read + write;
+
+        if (available >= frame_bytes)
+        {
+            /* copy from ring buffer to send buffer with wraparound */
+            int first = MIN(frame_bytes, TX_RING_SIZE - read);
+            memcpy(tx_send_buf, tx_ring_buf + read, first);
+            if (frame_bytes > first)
+                memcpy(tx_send_buf + first, tx_ring_buf, frame_bytes - first);
+            tx_read_pos = (read + frame_bytes) % TX_RING_SIZE;
+
+            usb_drv_send_nonblocking(EP_ISO_SOURCE_IN, tx_send_buf, frame_bytes);
+        }
+        else
+        {
+            /* underflow: send silence to keep ISO chain alive */
+            usb_drv_send_nonblocking(EP_ISO_SOURCE_IN, silence_buf, frame_bytes);
+        }
+        retval = true;
+    }
+
     // send feedback value every N frames!
     // NOTE: important that we need to queue this up _the frame before_ it's needed - on MacOS especially!
     if ((usb_drv_get_frame_number()+1) % FEEDBACK_UPDATE_RATE_FRAMES == 0 && send_fb)

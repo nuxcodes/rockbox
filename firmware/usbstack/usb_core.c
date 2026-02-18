@@ -53,6 +53,10 @@
 #include "usb_audio_def.h" // DEBUG
 #endif
 
+#ifdef USB_ENABLE_IAP_HID
+#include "usb_iap_hid.h"
+#endif
+
 /* TODO: Move target-specific stuff somewhere else (serial number reading) */
 
 #if defined(IPOD_ARCH) && defined(CPU_PP)
@@ -72,7 +76,7 @@
 #define USB_MAX_CURRENT 500
 #endif
 
-#define NUM_CONFIGS 1
+#define NUM_CONFIGS 2
 
 /*-------------------------------------------------------------------------*/
 /* USB protocol descriptors: */
@@ -283,7 +287,7 @@ static struct usb_class_driver drivers[USB_NUM_DRIVERS] =
     [USB_DRIVER_AUDIO] = {
         .enabled = false,
         .needs_exclusive_storage = false,
-        .config = 1,
+        .config = 2, /* iPod accessory config (audio + iAP HID) */
         .first_interface = 0,
         .last_interface = 0,
         .ep_allocs_size = ARRAYLEN(usb_audio_ep_allocs),
@@ -301,6 +305,29 @@ static struct usb_class_driver drivers[USB_NUM_DRIVERS] =
 #endif
         .set_interface = usb_audio_set_interface,
         .get_interface = usb_audio_get_interface,
+    },
+#endif
+#ifdef USB_ENABLE_IAP_HID
+    [USB_DRIVER_IAP_HID] = {
+        .enabled = false,
+        .needs_exclusive_storage = false,
+        .config = 2, /* iPod accessory config (audio + iAP HID) */
+        .first_interface = 0,
+        .last_interface = 0,
+        .ep_allocs_size = ARRAYLEN(usb_iap_hid_ep_allocs),
+        .ep_allocs = usb_iap_hid_ep_allocs,
+        .set_first_interface = usb_iap_hid_set_first_interface,
+        .get_config_descriptor = usb_iap_hid_get_config_descriptor,
+        .init_connection = usb_iap_hid_init_connection,
+        .init = usb_iap_hid_init,
+        .disconnect = usb_iap_hid_disconnect,
+        .transfer_complete = usb_iap_hid_transfer_complete,
+        .control_request = usb_iap_hid_control_request,
+#ifdef HAVE_HOTSWAP
+        .notify_hotswap = NULL,
+#endif
+        .set_interface = usb_iap_hid_set_interface,
+        .get_interface = usb_iap_hid_get_interface,
     },
 #endif
 };

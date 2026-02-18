@@ -173,6 +173,9 @@ enum {
 #ifdef USB_ENABLE_AUDIO
     USB_DRIVER_AUDIO,
 #endif
+#ifdef USB_ENABLE_IAP_HID
+    USB_DRIVER_IAP_HID,
+#endif
     USB_NUM_DRIVERS
 };
 

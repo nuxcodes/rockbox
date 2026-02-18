@@ -72,7 +72,6 @@ static long ata_last_activity_value = -1;
 static long ata_sleep_timeout = 7 * HZ;
 static bool ata_powered;
 static bool ata_ssd_mode = false;
-static bool ata_ssd_sleeping = false;
 static struct semaphore mmc_wakeup;
 static struct semaphore mmc_comp_wakeup;
 #ifdef HAVE_ATA_DMA
@@ -650,67 +649,6 @@ static int ata_get_best_mode(unsigned short identword, int max, int modetype)
  *  Tcyc = tDVS+tDVH
  *  WR[bytes/s] = 1/Tcyc[s] * 2[bytes]
  */
-static int ata_power_up(void);
-
-static int ata_ssd_wakeup(void)
-{
-    logf("ata SSD WAKE %ld", current_tick);
-    ata_set_active();
-
-    /* Ungate the ATA controller clock */
-    PWRCON(0) &= ~(1 << 5);
-
-    /* Re-initialize controller WITHOUT resetting the ATA bus.
-     * ATA_SWRST is intentionally skipped -- it asserts RESET# on
-     * the bus which causes iFlash adapters to re-initialize (~3s).
-     * The drive was never put in standby and the controller was
-     * cleanly disabled before clock gating, so the drive's state
-     * (DMA mode, write cache, read lookahead) is unchanged. */
-    ATA_CFG = BIT(0);
-    sleep(HZ / 100);
-    ATA_CFG = 0;
-    sleep(HZ / 100);
-
-    /* Skip ATA_SWRST -- do not reset the drive */
-
-    ATA_CONTROL = BIT(0);
-    sleep(HZ / 100);
-
-    /* Restore controller timing from cached identify_info */
-    uint32_t piotime = 0x11f3;
-    if (identify_info[53] & BIT(1))
-    {
-        if (identify_info[64] & BIT(1))
-            piotime = 0x2072;
-        else if (identify_info[64] & BIT(0))
-            piotime = 0x7083;
-    }
-    ATA_PIO_TIME = piotime;
-    ATA_PIO_LHR = 0;
-    ATA_CFG = BIT(6);
-    while (!(ATA_PIO_READY & BIT(1))) yield();
-
-    /* Verify the drive is still responsive. If not, fall back to
-     * full ata_power_up() which includes SRST + identify + features. */
-    if (ata_wait_for_rdy(500000))
-    {
-        logf("ata SSD WAKE rdy fail, full powerup");
-        ata_ssd_sleeping = false;
-        return ata_power_up();
-    }
-
-#ifdef HAVE_ATA_DMA
-    if (dma_mode & 0x40)
-        ATA_UDMA_TIME = udmatimes[dma_mode & 0xf];
-    else if (dma_mode & 0x20)
-        ATA_MDMA_TIME = mwdmatimes[dma_mode & 0xf];
-#endif
-
-    ata_ssd_sleeping = false;
-    ata_powered = true;
-    return 0;
-}
-
 static int ata_power_up(void)
 {
     logf("ata POWERUP %ld", current_tick);
@@ -832,7 +770,6 @@ static int ata_power_up(void)
         ata_lba48 = false;
     }
 
-    ata_ssd_sleeping = false;
     ata_powered = true;
     ata_set_active();
     return 0;
@@ -979,12 +916,7 @@ static int ata_rw_chunk(uint64_t sector, uint32_t cnt, void* buffer, bool write)
 static int ata_transfer_sectors(uint64_t sector, int count, void* buffer, int write)
 {
     if (!ata_powered)
-    {
-        if (ata_ssd_sleeping)
-            ata_ssd_wakeup();
-        else
-            ata_power_up();
-    }
+        ata_power_up();
     if (sector + count > total_sectors)
         RET_ERR(0);
     ata_set_active();
@@ -1187,18 +1119,12 @@ void ata_sleepnow(void)
         PWRCON(0) |= (1 << 9);
         ata_power_down();
     } else if (ata_ssd_mode) {
-        logf("ata SSD SLEEP %ld", current_tick);
-        /* Skip STANDBY_IMMEDIATE -- flash draws negligible idle
-         * current, and sending standby forces a slow wakeup
-         * (3-5s on iFlash).  Just flush, gate the ATA controller
-         * clock to stop SoC heat, and leave the drive active for
-         * instant wakeup. */
-        ATA_CONTROL = 0;
-        while (!(ATA_CONTROL & BIT(1)))
-            yield();
-        PWRCON(0) |= (1 << 5);
-        ata_ssd_sleeping = true;
-        ata_powered = false;
+        /* SSD: flush only (already done above), skip sleep.
+         * Flash draws negligible idle current -- no platters to
+         * stop.  Keep the ATA controller clocked so storage access
+         * is always instant.  Reset the activity timer to defer
+         * the next idle cycle. */
+        ata_set_active();
     } else if (ata_disk_can_sleep()) {
         logf("ata SLEEP %ld", current_tick);
         ata_wait_for_rdy(1000000);

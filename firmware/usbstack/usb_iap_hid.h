@@ -1,0 +1,39 @@
+/***************************************************************************
+ *             __________               __   ___.
+ *   Open      \______   \ ____   ____ |  | _\_ |__   _______  ___
+ *   Source     |       _//  _ \_/ ___\|  |/ /| __ \ /  _ \  \/  /
+ *   Jukebox    |    |   (  <_> )  \___|    < | \_\ (  <_> > <  <
+ *   Firmware   |____|_  /\____/ \___  >__|_ \|___  /\____/__/\_ \
+ *                     \/            \/     \/    \/            \/
+ *
+ * Copyright (C) 2025
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ *
+ * This software is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY
+ * KIND, either express or implied.
+ *
+ ****************************************************************************/
+#ifndef USB_IAP_HID_H
+#define USB_IAP_HID_H
+
+#include "usb_ch9.h"
+#include "usb_class_driver.h"
+
+extern struct usb_class_driver_ep_allocation usb_iap_hid_ep_allocs[1];
+
+int usb_iap_hid_set_first_interface(int interface);
+int usb_iap_hid_get_config_descriptor(unsigned char *dest, int max_packet_size);
+void usb_iap_hid_init_connection(void);
+void usb_iap_hid_init(void);
+void usb_iap_hid_disconnect(void);
+void usb_iap_hid_transfer_complete(int ep, int dir, int status, int length);
+bool usb_iap_hid_control_request(struct usb_ctrlrequest *req, void *reqdata,
+                                  unsigned char *dest);
+int usb_iap_hid_set_interface(int intf, int alt);
+int usb_iap_hid_get_interface(int intf);
+
+#endif /* USB_IAP_HID_H */

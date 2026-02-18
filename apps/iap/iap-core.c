@@ -49,6 +49,18 @@
 #include "ipod_remote_tuner.h"
 #endif
 
+/* Transport abstraction — defaults to serial UART, can be overridden for USB HID */
+static void iap_serial_tx(const unsigned char *buf, int len)
+{
+    int i;
+    for (i = 0; i < len; i++)
+    {
+        while(!tx_rdy()) ;
+        tx_writec(buf[i]);
+    }
+}
+
+void (*iap_transport_send)(const unsigned char *buf, int len) = iap_serial_tx;
 
 /* MS_TO_TICKS converts a milisecond time period into the
  * corresponding amount of ticks. If the time period cannot
@@ -573,11 +585,7 @@ void iap_send_tx(void)
 #if defined(LOGF_ENABLE) && defined(ROCKBOX_HAS_LOGF)
     logf("T: %s", hexstring(txstart+3, (iap_txnext - txstart)-3));
 #endif
-    for (i=0; i <= (iap_txnext - txstart); i++)
-    {
-        while(!tx_rdy()) ;
-        tx_writec(txstart[i]);
-    }
+    iap_transport_send(txstart, (iap_txnext - txstart) + 1);
 }
 
 /* This is just a compatibility wrapper around the new TX buffer

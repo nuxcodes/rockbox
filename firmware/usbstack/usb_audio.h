@@ -30,7 +30,7 @@
  * Relevant specifications are USB 2.0 and USB Audio Class 1.0.
  */
 
-extern struct usb_class_driver_ep_allocation usb_audio_ep_allocs[2];
+extern struct usb_class_driver_ep_allocation usb_audio_ep_allocs[3];
 
 /*
  * usb_audio_set_first_interface():
@@ -42,8 +42,8 @@ extern struct usb_class_driver_ep_allocation usb_audio_ep_allocs[2];
  * Returns the number of the interface available for the next
  * class driver to use.
  *
- * We need 2 interfaces, AudioControl and AudioStreaming.
- * Return interface+2.
+ * We need 3 interfaces: AudioControl, Playback AudioStreaming, and Source AudioStreaming.
+ * Return interface+3.
  */
 int usb_audio_set_first_interface(int interface);
 
