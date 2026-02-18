@@ -256,8 +256,28 @@ static void iap_hid_process_rx(const unsigned char *data, int len)
          len > 5 ? data[5] : 0, len > 6 ? data[6] : 0,
          len > 7 ? data[7] : 0);
 
-    /* feed payload bytes to iAP parser (skip report ID byte) */
+    /* iAP over USB HID: the 0xFF sync byte from serial framing is
+     * replaced with 0x00 in the HID transport. The iAP parser expects
+     * 0xFF 0x55 to start a frame. Find the 0x55 sync marker in the
+     * payload, inject 0xFF before it, then feed the rest. */
+    int sync_offset = -1;
     for (i = 0; i < payload_len; i++)
+    {
+        if (data[1 + i] == 0x55)
+        {
+            sync_offset = i;
+            break;
+        }
+    }
+
+    if (sync_offset < 0)
+        return; /* no sync found, skip this report */
+
+    /* inject the 0xFF sync byte that the iAP parser needs */
+    iap_getc(0xFF);
+
+    /* feed from the 0x55 onwards */
+    for (i = sync_offset; i < payload_len; i++)
     {
         iap_getc(data[1 + i]);
     }
