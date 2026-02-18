@@ -78,7 +78,7 @@ static struct {
     uint16_t wTotalLength;
     uint8_t  bInCollection;
     uint8_t  baInterfaceNr[2];
-} __attribute__ ((packed)) ac_header =
+} __attribute__ ((packed, unused)) ac_header =
 {
     .bLength            = USB_AC_SIZEOF_HEADER(2), /* two streaming interfaces */
     .bDescriptorType    = USB_DT_CS_INTERFACE,
@@ -91,14 +91,16 @@ static struct {
 
 enum
 {
-    AC_PLAYBACK_INPUT_TERMINAL_ID = 1,
+    /* Source IDs first (1, 2) — matches Apple/ipod-gadget layout */
+    AC_SOURCE_INPUT_TERMINAL_ID = 1,
+    AC_SOURCE_OUTPUT_TERMINAL_ID,
+    /* Playback IDs follow (3, 4, 5) — only used in sink mode */
+    AC_PLAYBACK_INPUT_TERMINAL_ID,
     AC_PLAYBACK_FEATURE_ID,
     AC_PLAYBACK_OUTPUT_TERMINAL_ID,
-    AC_SOURCE_INPUT_TERMINAL_ID,
-    AC_SOURCE_OUTPUT_TERMINAL_ID,
 };
 
-static struct usb_ac_input_terminal ac_playback_input =
+static struct usb_ac_input_terminal __attribute__((unused)) ac_playback_input =
 {
     .bLength            = sizeof(struct usb_ac_input_terminal),
     .bDescriptorType    = USB_DT_CS_INTERFACE,
@@ -112,7 +114,7 @@ static struct usb_ac_input_terminal ac_playback_input =
     .iTerminal          = 0,
 };
 
-static struct usb_ac_output_terminal ac_playback_output =
+static struct usb_ac_output_terminal __attribute__((unused)) ac_playback_output =
 {
     .bLength            = sizeof(struct usb_ac_output_terminal),
     .bDescriptorType    = USB_DT_CS_INTERFACE,
@@ -127,7 +129,7 @@ static struct usb_ac_output_terminal ac_playback_output =
 /* Feature Unit with 2 logical channels and 1 byte(8 bits) per control */
 DEFINE_USB_AC_FEATURE_UNIT(8, 2)
 
-static struct usb_ac_feature_unit_8_2 ac_playback_feature =
+static struct usb_ac_feature_unit_8_2 __attribute__((unused)) ac_playback_feature =
 {
     .bLength            = sizeof(struct usb_ac_feature_unit_8_2),
     .bDescriptorType    = USB_DT_CS_INTERFACE,
@@ -170,9 +172,29 @@ static struct usb_ac_output_terminal ac_source_output =
     .iTerminal          = 0,
 };
 
+/* Source-only AC header for config 2 (matches Apple layout: bInCollection=1) */
+static struct {
+    uint8_t  bLength;
+    uint8_t  bDescriptorType;
+    uint8_t  bDescriptorSubType;
+    uint16_t bcdADC;
+    uint16_t wTotalLength;
+    uint8_t  bInCollection;
+    uint8_t  baInterfaceNr[1];
+} __attribute__ ((packed)) ac_source_header =
+{
+    .bLength            = USB_AC_SIZEOF_HEADER(1),
+    .bDescriptorType    = USB_DT_CS_INTERFACE,
+    .bDescriptorSubType = USB_AC_HEADER,
+    .bcdADC             = 0x0100,
+    .wTotalLength       = 0, /* fill later */
+    .bInCollection      = 1, /* one streaming interface (source only) */
+    .baInterfaceNr      = {0}, /* fill later */
+};
+
 /* Audio Streaming Interface */
 /* Alternative: no streaming */
-static struct usb_interface_descriptor
+static struct usb_interface_descriptor __attribute__((unused))
     as_interface_alt_idle_playback =
 {
     .bLength            = sizeof(struct usb_interface_descriptor),
@@ -187,7 +209,7 @@ static struct usb_interface_descriptor
 };
 
 /* Alternative: output streaming */
-static struct usb_interface_descriptor
+static struct usb_interface_descriptor __attribute__((unused))
     as_interface_alt_playback =
 {
     .bLength            = sizeof(struct usb_interface_descriptor),
@@ -202,7 +224,7 @@ static struct usb_interface_descriptor
 };
 
 /* Class Specific Audio Streaming Interface */
-static struct usb_as_interface
+static struct usb_as_interface __attribute__((unused))
     as_playback_cs_interface =
 {
     .bLength            = sizeof(struct usb_as_interface),
@@ -230,7 +252,7 @@ static struct usb_as_format_type_i_discrete
     }
 };
 
-static struct usb_as_iso_audio_endpoint
+static struct usb_as_iso_audio_endpoint __attribute__((unused))
     as_iso_audio_out_ep =
 {
     .bLength          = sizeof(struct usb_as_iso_audio_endpoint),
@@ -271,7 +293,7 @@ static struct usb_as_iso_audio_endpoint
 #define FEEDBACK_UPDATE_RATE_P 5
 #define FEEDBACK_UPDATE_RATE_REFRESH (10-FEEDBACK_UPDATE_RATE_P)
 #define FEEDBACK_UPDATE_RATE_FRAMES (0x1<<FEEDBACK_UPDATE_RATE_REFRESH)
-static struct usb_as_iso_synch_endpoint
+static struct usb_as_iso_synch_endpoint __attribute__((unused))
     as_iso_synch_in_ep =
 {
     .bLength          = sizeof(struct usb_as_iso_synch_endpoint),
@@ -284,7 +306,7 @@ static struct usb_as_iso_synch_endpoint
     .bSynchAddress    = 0  /* MUST be zero! */
 };
 
-static struct usb_as_iso_ctrldata_endpoint
+static struct usb_as_iso_ctrldata_endpoint __attribute__((unused))
     as_iso_ctrldata_samfreq =
 {
     .bLength            = sizeof(struct usb_as_iso_ctrldata_endpoint),
@@ -381,43 +403,27 @@ static struct usb_as_iso_ctrldata_endpoint
     .wLockDelay         = 0
 };
 
-static const struct usb_descriptor_header* const ac_cs_descriptors_list[] =
+/* Source-only AC class-specific descriptors (for config 2 wTotalLength) */
+static const struct usb_descriptor_header* const ac_source_cs_descriptors_list[] =
 {
-    (struct usb_descriptor_header *) &ac_header,
-    (struct usb_descriptor_header *) &ac_playback_input,
-    (struct usb_descriptor_header *) &ac_playback_feature,
-    (struct usb_descriptor_header *) &ac_playback_output,
+    (struct usb_descriptor_header *) &ac_source_header,
     (struct usb_descriptor_header *) &ac_source_input,
     (struct usb_descriptor_header *) &ac_source_output,
 };
 
-#define AC_CS_DESCRIPTORS_LIST_SIZE (sizeof(ac_cs_descriptors_list)/sizeof(ac_cs_descriptors_list[0]))
+#define AC_SOURCE_CS_DESCRIPTORS_LIST_SIZE \
+    (sizeof(ac_source_cs_descriptors_list)/sizeof(ac_source_cs_descriptors_list[0]))
 
-// TODO: AudioControl Interrupt endpoint to inform the host that changes were made on-device!
-// The most immediately useful of this capability is volume and mute changes.
-static const struct usb_descriptor_header* const usb_descriptors_list[] =
+/* Source-only descriptors for config 2 (matches Apple/ipod-gadget layout):
+ * AC interface + source terminals + source AS + iAP HID (separate driver) */
+static const struct usb_descriptor_header* const usb_source_descriptors_list[] =
 {
-    /* Audio Control */
+    /* Audio Control — source only */
     (struct usb_descriptor_header *) &ac_interface,
-    (struct usb_descriptor_header *) &ac_header,
-    (struct usb_descriptor_header *) &ac_playback_input,
-    (struct usb_descriptor_header *) &ac_playback_feature,
-    (struct usb_descriptor_header *) &ac_playback_output,
+    (struct usb_descriptor_header *) &ac_source_header,
     (struct usb_descriptor_header *) &ac_source_input,
     (struct usb_descriptor_header *) &ac_source_output,
-    /* Audio Streaming - Playback (sink: host -> iPod) */
-    /*   Idle Playback */
-    (struct usb_descriptor_header *) &as_interface_alt_idle_playback,
-    /*   Playback */
-    (struct usb_descriptor_header *) &as_interface_alt_playback,
-    (struct usb_descriptor_header *) &as_playback_cs_interface,
-    (struct usb_descriptor_header *) &as_playback_format_type_i,
-    /* NOTE: the order of these three is important for maximum compatibility.
-     * Synch ep should follow iso out ep, with ctrldata descriptor coming first. */
-    (struct usb_descriptor_header *) &as_iso_ctrldata_samfreq,
-    (struct usb_descriptor_header *) &as_iso_audio_out_ep,
-    (struct usb_descriptor_header *) &as_iso_synch_in_ep,
-    /* Audio Streaming - Source (iPod -> host, for external DAC) */
+    /* Audio Streaming - Source (iPod -> host) */
     /*   Idle Source */
     (struct usb_descriptor_header *) &as_interface_alt_idle_source,
     /*   Source */
@@ -428,7 +434,8 @@ static const struct usb_descriptor_header* const usb_descriptors_list[] =
     (struct usb_descriptor_header *) &as_iso_ctrldata_source_samfreq,
 };
 
-#define USB_DESCRIPTORS_LIST_SIZE (sizeof(usb_descriptors_list)/sizeof(usb_descriptors_list[0]))
+#define USB_SOURCE_DESCRIPTORS_LIST_SIZE \
+    (sizeof(usb_source_descriptors_list)/sizeof(usb_source_descriptors_list[0]))
 
 static int usb_interface; /* first interface */
 static int usb_as_playback_intf_alt; /* playback streaming interface alternate setting */
@@ -438,10 +445,10 @@ static int as_playback_freq_idx; /* audio playback streaming frequency index (in
 static int as_source_freq_idx; /* audio source streaming frequency index (in hw_freq_sampr) */
 
 struct usb_class_driver_ep_allocation usb_audio_ep_allocs[3] = {
-    /* output isochronous endpoint (sink: host -> iPod) */
-    {.type = USB_ENDPOINT_XFER_ISOC, .dir = DIR_OUT, .optional = false},
-    /* input feedback isochronous endpoint (for sink async mode) */
-    {.type = USB_ENDPOINT_XFER_ISOC, .dir = DIR_IN, .optional = false},
+    /* output isochronous endpoint (sink: host -> iPod) — optional in source-only config 2 */
+    {.type = USB_ENDPOINT_XFER_ISOC, .dir = DIR_OUT, .optional = true},
+    /* input feedback isochronous endpoint (for sink async mode) — optional in source-only config 2 */
+    {.type = USB_ENDPOINT_XFER_ISOC, .dir = DIR_IN, .optional = true},
     /* input isochronous endpoint (source: iPod -> host) */
     {.type = USB_ENDPOINT_XFER_ISOC, .dir = DIR_IN, .optional = false},
 };
@@ -690,39 +697,37 @@ int usb_audio_request_buf(void)
      * audio_stop() is not needed here; the SYS_USB_CONNECTED broadcast
      * handles playback shutdown when mass storage takes exclusive access. */
 
-    // attempt to allocate the receive buffers
-    rx_buffer_handle = core_alloc(REAL_BUF_SIZE);
-    if (rx_buffer_handle < 0)
+    /* Only allocate sink buffers if sink endpoints were actually assigned */
+    if (EP_ISO_OUT != 0)
     {
-        alloc_failed = true;
-        return -1;
-    }
-    else
-    {
-        alloc_failed = false;
+        /* attempt to allocate the receive buffers */
+        rx_buffer_handle = core_alloc(REAL_BUF_SIZE);
+        if (rx_buffer_handle < 0)
+        {
+            alloc_failed = true;
+            return -1;
+        }
+        else
+        {
+            alloc_failed = false;
+            core_pin(rx_buffer_handle);
+            rx_buffer = core_get_data(rx_buffer_handle);
+        }
 
-        // "pin" the allocation so that the core does not move it in memory
-        core_pin(rx_buffer_handle);
-
-        // get the pointer to the actual buffer location
-        rx_buffer = core_get_data(rx_buffer_handle);
-    }
-
-    dsp_buf_handle = core_alloc(NR_BUFFERS * REAL_DSP_BUF_SIZE);
-    if (dsp_buf_handle < 0)
-    {
-        alloc_failed = true;
-        rx_buffer_handle = core_free(rx_buffer_handle);
-        rx_buffer = NULL;
-        return -1;
-    }
-    else
-    {
-        alloc_failed = false;
-
-        core_pin(dsp_buf_handle);
-
-        dsp_buf = core_get_data(dsp_buf_handle);
+        dsp_buf_handle = core_alloc(NR_BUFFERS * REAL_DSP_BUF_SIZE);
+        if (dsp_buf_handle < 0)
+        {
+            alloc_failed = true;
+            rx_buffer_handle = core_free(rx_buffer_handle);
+            rx_buffer = NULL;
+            return -1;
+        }
+        else
+        {
+            alloc_failed = false;
+            core_pin(dsp_buf_handle);
+            dsp_buf = core_get_data(dsp_buf_handle);
+        }
     }
 
     /* allocate TX ring buffer for source mode */
@@ -730,10 +735,16 @@ int usb_audio_request_buf(void)
     if (tx_ring_buf_handle < 0)
     {
         alloc_failed = true;
-        rx_buffer_handle = core_free(rx_buffer_handle);
-        rx_buffer = NULL;
-        dsp_buf_handle = core_free(dsp_buf_handle);
-        dsp_buf = NULL;
+        if (rx_buffer)
+        {
+            rx_buffer_handle = core_free(rx_buffer_handle);
+            rx_buffer = NULL;
+        }
+        if (dsp_buf)
+        {
+            dsp_buf_handle = core_free(dsp_buf_handle);
+            dsp_buf = NULL;
+        }
         return -1;
     }
     else
@@ -749,14 +760,23 @@ int usb_audio_request_buf(void)
 void usb_audio_free_buf(void)
 {
     // logf("usbaudio: free buffer");
-    rx_buffer_handle = core_free(rx_buffer_handle);
-    rx_buffer = NULL;
+    if (rx_buffer)
+    {
+        rx_buffer_handle = core_free(rx_buffer_handle);
+        rx_buffer = NULL;
+    }
 
-    dsp_buf_handle = core_free(dsp_buf_handle);
-    dsp_buf = NULL;
+    if (dsp_buf)
+    {
+        dsp_buf_handle = core_free(dsp_buf_handle);
+        dsp_buf = NULL;
+    }
 
-    tx_ring_buf_handle = core_free(tx_ring_buf_handle);
-    tx_ring_buf = NULL;
+    if (tx_ring_buf)
+    {
+        tx_ring_buf_handle = core_free(tx_ring_buf_handle);
+        tx_ring_buf = NULL;
+    }
 }
 
 unsigned int usb_audio_get_out_ep(void)
@@ -773,7 +793,7 @@ int usb_audio_set_first_interface(int interface)
 {
     usb_interface = interface;
     logf("usbaudio: usb_interface=%d", usb_interface);
-    return interface + 3; /* Audio Control, Playback Streaming, Source Streaming */
+    return interface + 2; /* Audio Control + Source Streaming */
 }
 
 int usb_audio_get_config_descriptor(unsigned char *dest, int max_packet_size)
@@ -782,62 +802,36 @@ int usb_audio_get_config_descriptor(unsigned char *dest, int max_packet_size)
     unsigned int i;
     unsigned char *orig_dest = dest;
 
-    logf("get config descriptors");
+    logf("get config descriptors (source-only)");
 
-    /** Configuration */
+    /* Config 2 is source-only, matching Apple/ipod-gadget layout:
+     * AC interface (bInCollection=1) + Source AS + (iAP HID is separate driver) */
 
-    /* header */
-    ac_header.baInterfaceNr[0] = usb_interface + 1;
-    ac_header.baInterfaceNr[1] = usb_interface + 2;
-
-    /* audio control interface */
+    /* Audio Control interface */
     ac_interface.bInterfaceNumber = usb_interface;
 
-    /* compute total size of AC headers*/
-    ac_header.wTotalLength = 0;
-    for(i = 0; i < AC_CS_DESCRIPTORS_LIST_SIZE; i++)
-        ac_header.wTotalLength += ac_cs_descriptors_list[i]->bLength;
+    /* Source-only AC header */
+    ac_source_header.baInterfaceNr[0] = usb_interface + 1;
+    ac_source_header.wTotalLength = 0;
+    for(i = 0; i < AC_SOURCE_CS_DESCRIPTORS_LIST_SIZE; i++)
+        ac_source_header.wTotalLength += ac_source_cs_descriptors_list[i]->bLength;
 
-    /* audio streaming - playback (sink) */
-    as_interface_alt_idle_playback.bInterfaceNumber = usb_interface + 1;
-    as_interface_alt_playback.bInterfaceNumber = usb_interface + 1;
+    /* Source AS interface numbers */
+    as_interface_alt_idle_source.bInterfaceNumber = usb_interface + 1;
+    as_interface_alt_source.bInterfaceNumber = usb_interface + 1;
 
-    /* audio streaming - source */
-    as_interface_alt_idle_source.bInterfaceNumber = usb_interface + 2;
-    as_interface_alt_source.bInterfaceNumber = usb_interface + 2;
-
-    /* endpoints - playback (sink) */
-    as_iso_audio_out_ep.wMaxPacketSize = 1023;
-    as_iso_audio_out_ep.bEndpointAddress = EP_ISO_OUT;
-    as_iso_audio_out_ep.bSynchAddress = EP_ISO_FEEDBACK_IN;
-    as_iso_synch_in_ep.bEndpointAddress = EP_ISO_FEEDBACK_IN;
-    as_iso_synch_in_ep.bSynchAddress = 0;
-
-    /* endpoints - source */
+    /* Source endpoint */
     as_iso_audio_in_ep.bEndpointAddress = EP_ISO_SOURCE_IN;
-
-    /** Endpoint Interval calculation:
-     * typically sampling frequency is 44100 Hz and top is 192000 Hz, which
-     * account for typical 44100*2(stereo)*2(16-bit) ~= 180 kB/s
-     * and top 770 kB/s. Since there are ~1000 frames per seconds and maximum
-     * packet size is set to 1023, one transaction per frame is good enough
-     * for over 1 MB/s.
-     * Recall that actual is 2^(bInterval - 1) */
-
-    /* In simpler language, This is intended to emulate full-speed's
-     * one-packet-per-frame rate on high-speed, where we have multiple microframes per millisecond.
-     */
-    as_iso_audio_out_ep.bInterval = usb_drv_port_speed() ? 4 : 1;
-    as_iso_synch_in_ep.bInterval = usb_drv_port_speed() ? 4 : 1; // per spec
     as_iso_audio_in_ep.bInterval = usb_drv_port_speed() ? 4 : 1;
 
     logf("usbaudio: port_speed=%s", usb_drv_port_speed()?"hs":"fs");
 
-    /** Packing */
-    for(i = 0; i < USB_DESCRIPTORS_LIST_SIZE; i++)
+    /* Pack source-only descriptors */
+    for(i = 0; i < USB_SOURCE_DESCRIPTORS_LIST_SIZE; i++)
     {
-        memcpy(dest, usb_descriptors_list[i], usb_descriptors_list[i]->bLength);
-        dest += usb_descriptors_list[i]->bLength;
+        memcpy(dest, usb_source_descriptors_list[i],
+               usb_source_descriptors_list[i]->bLength);
+        dest += usb_source_descriptors_list[i]->bLength;
     }
 
     return dest - orig_dest;
@@ -874,7 +868,7 @@ static void playback_audio_get_more(const void **start, size_t *size)
     restore_irq(oldlevel);
 }
 
-static void usb_audio_start_playback(void)
+static void __attribute__((unused)) usb_audio_start_playback(void)
 {
     usb_audio_playing = true;
     usb_rx_overflow = false;
@@ -1034,23 +1028,7 @@ int usb_audio_set_interface(int intf, int alt)
     }
     if(intf == (usb_interface + 1))
     {
-        if(alt < 0 || alt > 1)
-        {
-            logf("usbaudio: playback interface has no alternate %d", alt);
-            return -1;
-        }
-        usb_as_playback_intf_alt = alt;
-
-        if(usb_as_playback_intf_alt == 1)
-            usb_audio_start_playback();
-        else
-            usb_audio_stop_playback();
-        logf("usbaudio: use playback alternate %d", alt);
-
-        return 0;
-    }
-    if(intf == (usb_interface + 2))
-    {
+        /* Source AS interface (config 2 is source-only) */
         if(alt < 0 || alt > 1)
         {
             logf("usbaudio: source interface has no alternate %d", alt);
@@ -1081,11 +1059,6 @@ int usb_audio_get_interface(int intf)
         return 0;
     }
     else if(intf == (usb_interface + 1))
-    {
-        logf("usbaudio: playback interface alternate  is %d", usb_as_playback_intf_alt);
-        return usb_as_playback_intf_alt;
-    }
-    else if(intf == (usb_interface + 2))
     {
         logf("usbaudio: source interface alternate is %d", usb_as_source_intf_alt);
         return usb_as_source_intf_alt;

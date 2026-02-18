@@ -977,9 +977,24 @@ static void request_handler_device(struct usb_ctrlrequest* req, void* reqdata)
             usb_drv_control_response(USB_CONTROL_ACK, response_data, 2);
             break;
         default:
-            logf("bad req:desc %d:%d", req->bRequest, req->wValue);
-            usb_drv_control_response(USB_CONTROL_STALL, NULL, 0);
+        {
+            /* Try forwarding to active class drivers (e.g. Apple vendor
+             * request 0x40) before giving up with a STALL */
+            bool handled = false;
+            int i;
+            for(i = 0; i < USB_NUM_DRIVERS; i++) {
+                if(is_active(drivers[i]) && drivers[i].control_request != NULL &&
+                   drivers[i].control_request(req, reqdata, response_data)) {
+                    handled = true;
+                    break;
+                }
+            }
+            if(!handled) {
+                logf("bad req:desc %d:%d", req->bRequest, req->wValue);
+                usb_drv_control_response(USB_CONTROL_STALL, NULL, 0);
+            }
             break;
+        }
     }
 }
 
@@ -1019,6 +1034,10 @@ static void request_handler_interface(struct usb_ctrlrequest* req, void* reqdata
             control_request_handler_drivers(req, reqdata);
             break;
         case USB_TYPE_VENDOR:
+            /* Apple MFi accessories send vendor requests (e.g. 0x40) to
+             * interfaces; forward to the owning driver instead of STALLing */
+            control_request_handler_drivers(req, reqdata);
+            break;
         default:
             logf("bad req:desc %d", req->bRequest);
             usb_drv_control_response(USB_CONTROL_STALL, NULL, 0);
