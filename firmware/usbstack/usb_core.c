@@ -97,9 +97,9 @@ static struct usb_device_descriptor __attribute__((aligned(2)))
     .bMaxPacketSize0    = 64,
     .idVendor           = USB_VENDOR_ID,
     .idProduct          = USB_PRODUCT_ID,
-    .bcdDevice          = 0x0100,
-    .iManufacturer      = USB_STRING_INDEX_MANUFACTURER,
-    .iProduct           = USB_STRING_INDEX_PRODUCT,
+    .bcdDevice          = 0x0310,
+    .iManufacturer      = 0,
+    .iProduct           = 0,
     .iSerialNumber      = USB_STRING_INDEX_SERIAL,
     .bNumConfigurations = NUM_CONFIGS
 } ;
