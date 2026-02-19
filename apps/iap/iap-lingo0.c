@@ -752,15 +752,14 @@ void iap_handlepkt_mode0(const unsigned int len, const unsigned char *buf)
             }
             if (device.auth.state == AUST_CERTALLRECEIVED) {
                 /* We've received all the certificate data so just
-                 *Acknowledge everything OK
+                 * acknowledge everything OK.
+                 * Do NOT send GetAccessoryInfo (0x27) back-to-back here
+                 * because tx_buf is shared with nonblocking USB sends.
+                 * The Go daemon also skips GetAccessoryInfo at this point.
+                 * Periodic handler will send GetDevAuthenticationSignature
+                 * (0x17) on the next tick via AUST_CERTDONE.
                  */
                 IAP_TX_INIT(0x00, 0x16);
-                IAP_TX_PUT(0x00);
-
-                iap_send_tx();
-
-                /* GetAccessoryInfo*/
-                IAP_TX_INIT(0x00, 0x27);
                 IAP_TX_PUT(0x00);
 
                 iap_send_tx();
@@ -1240,18 +1239,16 @@ void iap_handlepkt_mode0(const unsigned int len, const unsigned char *buf)
                 IAP_TX_PUT(0x00); /* IDPSStatusOK */
                 iap_send_tx();
 
-                /* Set up device and start auth immediately.
-                 * Send GetDevAuthenticationInfo (0x14) directly and set
-                 * AUST_CERTREQ so the periodic handler doesn't re-send.
-                 * This matches the ipod-gadget Go daemon behavior.
+                /* Set up device and start auth.
+                 * Do NOT send GetDevAuthenticationInfo (0x14) here because
+                 * tx_buf is shared and usb_drv_send_nonblocking hasn't
+                 * finished sending IDPSStatus (0x3C) yet.
+                 * The periodic handler will send 0x14 on the next tick.
                  */
                 iap_reset_device(&device);
                 device.lingoes = BIT_N(0x00) | BIT_N(0x03) | BIT_N(0x0A);
                 device.do_power_notify = true;
-                device.auth.state = AUST_CERTREQ;
-
-                IAP_TX_INIT(0x00, 0x14);
-                iap_send_tx();
+                device.auth.state = AUST_INIT;
             }
             else if (idps_status == 0x01) /* Reset */
             {
