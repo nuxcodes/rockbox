@@ -1,0 +1,348 @@
+usb_dw_check_hw():
+ HW version: 260a, num EPs: 9
+ FIFO mem=2080 rx=864 nptx=64 ptx=3x384
+usbaudio: (init) supported frequencies
+usbaudio: playback 48000 Hz
+usbaudio: playback 44100 Hz
+usbaudio: source 8000 Hz
+usbaudio: source 11025 Hz
+usbaudio: source 12000 Hz
+usbaudio: source 16000 Hz
+usbaudio: source 22050 Hz
+usbaudio: source 24000 Hz
+usbaudio: source 32000 Hz
+usbaudio: source 44100 Hz
+usbaudio: source 48000 Hz
+usb_dw_control_received(0xa0f8) state=setup
+ bRequestType=80 bRequest=06
+ wValue=0100 wIndex=0 wLength=64
+usbaudio: usb_interface=0
+usb_dw_control_received(0xa0f8) state=setup
+ bRequestType=00 bRequest=05
+ wValue=0001 wIndex=0 wLength=0
+usbaudio: usb_interface=0
+usb_dw_control_received(0xa0f8) state=setup
+ bRequestType=40 bRequest=51
+ wValue=0000 wIndex=0 wLength=0
+usbaudio: unhandled req type 0x40
+usb_dw_control_received(0xa0f8) state=setup
+ bRequestType=40 bRequest=40
+ wValue=0000 wIndex=65036 wLength=0
+usbaudio: unhandled req type 0x40
+usb_dw_control_received(0xa0f8) state=setup
+ bRequestType=80 bRequest=06
+ wValue=0200 wIndex=0 wLength=250
+usb_dw_control_received(0xa0f8) state=setup
+ bRequestType=80 bRequest=06
+ wValue=0201 wIndex=0 wLength=250
+get config descriptors (source-only)
+usbaudio: port_speed=fs
+usb_dw_control_received(0xa0f8) state=setup
+ bRequestType=00 bRequest=09
+ wValue=0002 wIndex=0 wLength=0
+usbaudio: init connection
+usb_dw_control_received(0xa0f8) state=setup
+ bRequestType=81 bRequest=06
+ wValue=2200 wIndex=2 wLength=96
+usb_dw_control_received(0xa0f8) state=setup
+ bRequestType=21 bRequest=09
+ wValue=0209 wIndex=2 wLength=64
+usb_dw_control_received(0xa0f8) state=setup
+ bRequestType=21 bRequest=09
+ wValue=0209 wIndex=2 wLength=64
+usb_dw_control_received(0xa0f8) state=setup
+ bRequestType=21 bRequest=09
+ wValue=0209 wIndex=2 wLength=64
+usb_dw_control_received(0xa0f8) state=setup
+ bRequestType=21 bRequest=09
+ wValue=0209 wIndex=2 wLength=64
+usb_dw_control_received(0xa0f8) state=setup
+ bRequestType=21 bRequest=09
+ wValue=0209 wIndex=2 wLength=64
+usb_dw_control_received(0xa0f8) state=setup
+ bRequestType=21 bRequest=09
+ wValue=0209 wIndex=2 wLength=64
+usb_dw_control_received(0xa0f8) state=setup
+ bRequestType=21 bRequest=09
+ wValue=0209 wIndex=2 wLength=64
+usb_dw_control_received(0xa0f8) state=setup
+ bRequestType=21 bRequest=09
+ wValue=0209 wIndex=2 wLength=64
+usb_dw_control_received(0xa0f8) state=setup
+ bRequestType=21 bRequest=09
+ wValue=0209 wIndex=2 wLength=64
+usb_dw_control_received(0xa0f8) state=setup
+ bRequestType=21 bRequest=09
+ wValue=0209 wIndex=2 wLength=64
+usb_dw_control_received(0xa0f8) state=setup
+ bRequestType=21 bRequest=09
+ wValue=0209 wIndex=2 wLength=64
+usb_dw_control_received(0xa0f8) state=setup
+ bRequestType=21 bRequest=09
+ wValue=0209 wIndex=2 wLength=64
+usb_dw_control_received(0xa0f8) state=setup
+ bRequestType=21 bRequest=09
+ wValue=0209 wIndex=2 wLength=64
+usb_dw_control_received(0xa0f8) state=setup
+ bRequestType=21 bRequest=09
+ wValue=0209 wIndex=2 wLength=64
+usb_dw_control_received(0xa0f8) state=setup
+ bRequestType=21 bRequest=09
+ wValue=0209 wIndex=2 wLength=64
+usb_dw_control_received(0xa0f8) state=setup
+ bRequestType=21 bRequest=09
+ wValue=0209 wIndex=2 wLength=64
+usb_dw_control_received(0xa0f8) state=setup
+ bRequestType=21 bRequest=09
+ wValue=0209 wIndex=2 wLength=64
+usb_dw_control_received(0xa0f8) state=setup
+ bRequestType=21 bRequest=09
+ wValue=0209 wIndex=2 wLength=64
+usb_dw_control_received(0xa0f8) state=setup
+ bRequestType=21 bRequest=09
+ wValue=0209 wIndex=2 wLength=64
+usb_dw_control_received(0xa0f8) state=setup
+ bRequestType=21 bRequest=09
+ wValue=0209 wIndex=2 wLength=64
+usb_dw_control_received(0xa0f8) state=setup
+ bRequestType=21 bRequest=09
+ wValue=0209 wIndex=2 wLength=64
+usb_dw_control_received(0xa0f8) state=setup
+ bRequestType=21 bRequest=09
+ wValue=0209 wIndex=2 wLength=64
+usb_dw_control_received(0xa0f8) state=setup
+ bRequestType=21 bRequest=09
+ wValue=0209 wIndex=2 wLength=64
+usb_dw_control_received(0xa0f8) state=setup
+ bRequestType=21 bRequest=09
+ wValue=0209 wIndex=2 wLength=64
+usb_dw_control_received(0xa0f8) state=setup
+ bRequestType=21 bRequest=09
+ wValue=0209 wIndex=2 wLength=64
+usb_dw_control_received(0xa0f8) state=setup
+ bRequestType=21 bRequest=09
+ wValue=0209 wIndex=2 wLength=64
+usb_dw_control_received(0xa0f8) state=setup
+ bRequestType=21 bRequest=09
+ wValue=0209 wIndex=2 wLength=64
+usb_dw_control_received(0xa0f8) state=setup
+ bRequestType=21 bRequest=09
+ wValue=0209 wIndex=2 wLength=64
+usb_dw_control_received(0xa0f8) state=setup
+ bRequestType=21 bRequest=09
+ wValue=0209 wIndex=2 wLength=64
+usb_dw_control_received(0xa0f8) state=setup
+ bRequestType=21 bRequest=09
+ wValue=0209 wIndex=2 wLength=64
+usb_dw_control_received(0xa0f8) state=setup
+ bRequestType=21 bRequest=09
+ wValue=0209 wIndex=2 wLength=64
+usb_dw_control_received(0xa0f8) state=setup
+ bRequestType=21 bRequest=09
+ wValue=0209 wIndex=2 wLength=64
+usb_dw_control_received(0xa0f8) state=setup
+ bRequestType=21 bRequest=09
+ wValue=0209 wIndex=2 wLength=64
+usb_dw_control_received(0xa0f8) state=setup
+ bRequestType=21 bRequest=09
+ wValue=0209 wIndex=2 wLength=64
+usb_dw_control_received(0xa0f8) state=setup
+ bRequestType=21 bRequest=09
+ wValue=0209 wIndex=2 wLength=64
+usb_dw_control_received(0xa0f8) state=setup
+ bRequestType=21 bRequest=09
+ wValue=0209 wIndex=2 wLength=64
+usb_dw_control_received(0xa0f8) state=setup
+ bRequestType=21 bRequest=09
+ wValue=0209 wIndex=2 wLength=64
+usb_dw_control_received(0xa0f8) state=setup
+ bRequestType=21 bRequest=09
+ wValue=0209 wIndex=2 wLength=64
+usb_dw_control_received(0xa0f8) state=setup
+ bRequestType=21 bRequest=09
+ wValue=0209 wIndex=2 wLength=64
+usb_dw_control_received(0xa0f8) state=setup
+ bRequestType=21 bRequest=09
+ wValue=0209 wIndex=2 wLength=64
+usb_dw_control_received(0xa0f8) state=setup
+ bRequestType=21 bRequest=09
+ wValue=0209 wIndex=2 wLength=64
+usb_dw_control_received(0xa0f8) state=setup
+ bRequestType=21 bRequest=09
+ wValue=0209 wIndex=2 wLength=64
+usb_dw_control_received(0xa0f8) state=setup
+ bRequestType=21 bRequest=09
+ wValue=0209 wIndex=2 wLength=64
+usb_dw_control_received(0xa0f8) state=setup
+ bRequestType=21 bRequest=09
+ wValue=0209 wIndex=2 wLength=64
+usb_dw_control_received(0xa0f8) state=setup
+ bRequestType=21 bRequest=09
+ wValue=0209 wIndex=2 wLength=64
+usb_dw_control_received(0xa0f8) state=setup
+ bRequestType=21 bRequest=09
+ wValue=0209 wIndex=2 wLength=64
+usb_dw_control_received(0xa0f8) state=setup
+ bRequestType=21 bRequest=09
+ wValue=0209 wIndex=2 wLength=64
+usb_dw_control_received(0xa0f8) state=setup
+ bRequestType=21 bRequest=09
+ wValue=0209 wIndex=2 wLength=64
+usb_dw_control_received(0xa0f8) state=setup
+ bRequestType=21 bRequest=09
+ wValue=0209 wIndex=2 wLength=64
+usb_dw_control_received(0xa0f8) state=setup
+ bRequestType=21 bRequest=09
+ wValue=0209 wIndex=2 wLength=64
+usb_dw_control_received(0xa0f8) state=setup
+ bRequestType=21 bRequest=09
+ wValue=0209 wIndex=2 wLength=64
+usb_dw_control_received(0xa0f8) state=setup
+ bRequestType=22 bRequest=01
+ wValue=0100 wIndex=131 wLength=3
+usbaudio: set source sampling frequency to 44100 Hz for a requested 44100 Hz
+usb_dw_control_received(0xa0f8) state=setup
+ bRequestType=21 bRequest=09
+ wValue=0209 wIndex=2 wLength=64
+usb_dw_control_received(0xa0f8) state=setup
+ bRequestType=01 bRequest=0b
+ wValue=0001 wIndex=1 wLength=0
+usbaudio: start source at 44100 Hz ep=0x83
+ISO IN3: ctl=808583ff tsiz=200800b0 dma=081b6000
+  DSTS=00041c02 GINTSTS=04008c28 DIEPINT=00000000
+usbaudio: use source alternate 1
+IISOIXFR! DSTS=00041d02
+IISOIXFR! DSTS=00041f02
+IISOIXFR! DSTS=00042102
+IISOIXFR! DSTS=00042302
+IISOIXFR! DSTS=00042502
+IISOIXFR! DSTS=00042702
+IISOIXFR! DSTS=00042902
+IISOIXFR! DSTS=00042b02
+IISOIXFR! DSTS=00042d02
+IISOIXFR! DSTS=00042f02
+IISOIXFR! DSTS=00043102
+IISOIXFR! DSTS=00043302
+IISOIXFR! DSTS=00043502
+IISOIXFR! DSTS=00043702
+IISOIXFR! DSTS=00043902
+IISOIXFR! DSTS=00043b02
+IISOIXFR! DSTS=00043d02
+IISOIXFR! DSTS=00043f02
+IISOIXFR! DSTS=00044102
+IISOIXFR! DSTS=00044302
+IISOIXFR! DSTS=00044502
+IISOIXFR! DSTS=00044702
+IISOIXFR! DSTS=00044902
+IISOIXFR! DSTS=00044b02
+IISOIXFR! DSTS=00044d02
+IISOIXFR! DSTS=00044f02
+IISOIXFR! DSTS=00045102
+IISOIXFR! DSTS=00045302
+IISOIXFR! DSTS=00045502
+IISOIXFR! DSTS=00045702
+IISOIXFR! DSTS=00045902
+IISOIXFR! DSTS=00045b02
+IISOIXFR! DSTS=00045d02
+IISOIXFR! DSTS=00045f02
+IISOIXFR! DSTS=00046102
+IISOIXFR! DSTS=00046302
+IISOIXFR! DSTS=00046502
+IISOIXFR! DSTS=00046702
+IISOIXFR! DSTS=00046902
+IISOIXFR! DSTS=00046b02
+IISOIXFR! DSTS=00046d02
+IISOIXFR! DSTS=00046f02
+IISOIXFR! DSTS=00047102
+IISOIXFR! DSTS=00047302
+IISOIXFR! DSTS=00047502
+IISOIXFR! DSTS=00047702
+IISOIXFR! DSTS=00047902
+IISOIXFR! DSTS=00047b02
+IISOIXFR! DSTS=00047d02
+IISOIXFR! DSTS=00047f02
+IISOIXFR! DSTS=00048102
+IISOIXFR! DSTS=00048302
+IISOIXFR! DSTS=00048502
+IISOIXFR! DSTS=00048702
+IISOIXFR! DSTS=00048902
+IISOIXFR! DSTS=00048b02
+IISOIXFR! DSTS=00048d02
+IISOIXFR! DSTS=00048f02
+IISOIXFR! DSTS=00049102
+IISOIXFR! DSTS=00049302
+IISOIXFR! DSTS=00049502
+IISOIXFR! DSTS=00049702
+IISOIXFR! DSTS=00049902
+IISOIXFR! DSTS=00049b02
+IISOIXFR! DSTS=00049d02
+IISOIXFR! DSTS=00049f02
+IISOIXFR! DSTS=0004a102
+IISOIXFR! DSTS=0004a302
+IISOIXFR! DSTS=0004a502
+IISOIXFR! DSTS=0004a702
+IISOIXFR! DSTS=0004a902
+IISOIXFR! DSTS=0004ab02
+IISOIXFR! DSTS=0004ad02
+IISOIXFR! DSTS=0004af02
+IISOIXFR! DSTS=0004b102
+IISOIXFR! DSTS=0004b302
+IISOIXFR! DSTS=0004b502
+IISOIXFR! DSTS=0004b702
+IISOIXFR! DSTS=0004b902
+IISOIXFR! DSTS=0004bb02
+IISOIXFR! DSTS=0004bd02
+IISOIXFR! DSTS=0004bf02
+IISOIXFR! DSTS=0004c102
+IISOIXFR! DSTS=0004c302
+IISOIXFR! DSTS=0004c502
+IISOIXFR! DSTS=0004c702
+IISOIXFR! DSTS=0004c902
+IISOIXFR! DSTS=0004cb02
+IISOIXFR! DSTS=0004cd02
+IISOIXFR! DSTS=0004cf02
+IISOIXFR! DSTS=0004d102
+IISOIXFR! DSTS=0004d302
+IISOIXFR! DSTS=0004d502
+IISOIXFR! DSTS=0004d702
+IISOIXFR! DSTS=0004d902
+IISOIXFR! DSTS=0004db02
+IISOIXFR! DSTS=0004dd02
+IISOIXFR! DSTS=0004df02
+IISOIXFR! DSTS=0004e102
+IISOIXFR! DSTS=0004e302
+IISOIXFR! DSTS=0004e502
+IISOIXFR! DSTS=0004e702
+IISOIXFR! DSTS=0004e902
+IISOIXFR! DSTS=0004eb02
+IISOIXFR! DSTS=0004ed02
+IISOIXFR! DSTS=0004ef02
+IISOIXFR! DSTS=0004f102
+IISOIXFR! DSTS=0004f302
+IISOIXFR! DSTS=0004f502
+IISOIXFR! DSTS=0004f702
+IISOIXFR! DSTS=0004f902
+IISOIXFR! DSTS=0004fb02
+IISOIXFR! DSTS=0004fd02
+IISOIXFR! DSTS=0004ff02
+IISOIXFR! DSTS=00050102
+IISOIXFR! DSTS=00050302
+IISOIXFR! DSTS=00050502
+IISOIXFR! DSTS=00050702
+IISOIXFR! DSTS=00050902
+IISOIXFR! DSTS=00050b02
+IISOIXFR! DSTS=00050d02
+IISOIXFR! DSTS=00050f02
+IISOIXFR! DSTS=00051102
+IISOIXFR! DSTS=00051302
+IISOIXFR! DSTS=00051502
+IISOIXFR! DSTS=00051702
+IISOIXFR! DSTS=00051902
+Codec: calling entrypoint
+Codec: not an encoder
+Codec: entering run state
+src hook: 8192 bytes, ring 8192/12288
+src hook: 4095 bytes, ring 12287/12288
+usbaudio: disconnect
+usbaudio: stop playback
+usbaudio: stop source
