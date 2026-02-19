@@ -649,14 +649,15 @@ void iap_handlepkt_mode0(const unsigned int len, const unsigned char *buf)
          * The certificate may come in multiple parts and has
          * to be reassembled.
          *
-         * Packet format (offset in buf[]: Description)
-         * 0x00: Lingo ID: General Lingo, always 0x00
-         * 0x01: Command, always 0x15
-         * 0x02: Authentication major version
-         * 0x03: Authentication minor version
-         * 0x04: Certificate current section index
-         * 0x05: Certificate maximum section index
-         * 0x06-0xNN: Certificate data
+         * In IDPS mode, a 2-byte transaction ID precedes the data:
+         * 0x02-0x03: Transaction ID (if present)
+         *
+         * Data fields (at offset 'off'):
+         * off+0: Authentication major version
+         * off+1: Authentication minor version
+         * off+2: Certificate current section index
+         * off+3: Certificate maximum section index
+         * off+4+: Certificate data
          *
          * Returns on success:
          * IAP_ACK_OK for intermediate sections
@@ -669,11 +670,6 @@ void iap_handlepkt_mode0(const unsigned int len, const unsigned char *buf)
          */
         case 0x15:
         {
-            /* There are two formats of this packet. One with only
-             * the version information bytes (for Auth version 1.0)
-             * and the long form shown above but it must be at least 4
-             * bytes long
-             */
             CHECKLEN(4);
 
             if (!DEVICE_AUTH_RUNNING) {
@@ -681,13 +677,19 @@ void iap_handlepkt_mode0(const unsigned int len, const unsigned char *buf)
                 break;
             }
 
-            device.auth.version = (buf[2] << 8) | buf[3];
+            /* Detect transaction ID: valid auth major is 0x01 or 0x02.
+             * If buf[2] is neither, there's a 2-byte transID before the
+             * version (IDPS mode). */
+            int off = 2;
+            if (buf[2] != 0x01 && buf[2] != 0x02) {
+                off = 4;
+                CHECKLEN(6);
+            }
+
+            device.auth.version = (buf[off] << 8) | buf[off + 1];
 
             /* We only support authentication versions 1.0 and 2.0 */
             if ((device.auth.version != 0x100) && (device.auth.version != 0x200)) {
-                /* Version mismatches are signalled by AckDevAuthenticationInfo
-                 * with the status set to Authentication Information unsupported
-                 */
                 iap_reset_auth(&(device.auth));
 
                 IAP_TX_INIT(0x00, 0x16);
@@ -697,45 +699,29 @@ void iap_handlepkt_mode0(const unsigned int len, const unsigned char *buf)
                 break;
             }
             if (device.auth.version == 0x100) {
-                /* If we could really do authentication we'd have to
-                 * check the certificate here. Since we can't, just acknowledge
-                 * the packet later with an "everything OK" AckDevAuthenticationInfo
-                 * and change device.auth.state to AuthenticateState_CertificateDone
-                 */
                 device.auth.state = AUST_CERTALLRECEIVED;
             } else {
-                /* Version 2.00 requires at least one byte of certificate data
-                 * in the packet
-                 */
-                CHECKLEN(7);
+                /* Version 2.00 requires at least one byte of certificate data */
+                CHECKLEN(off + 5);
                 switch (device.auth.state)
                 {
-                    /* This is the first packet. Note the maximum section number
-                     * so we can check it later.
-                     */
                     case AUST_CERTREQ:
                     {
-                        device.auth.max_section = buf[5];
+                        device.auth.max_section = buf[off + 3];
                         device.auth.state = AUST_CERTBEG;
 
                         /* Intentional fall-through */
                     }
-                    /* All following packets */
                     case AUST_CERTBEG:
                     {
                         /* Check if this is the expected section */
-                        if (buf[4] != device.auth.next_section) {
+                        if (buf[off + 2] != device.auth.next_section) {
                             cmd_ack(cmd, IAP_ACK_BAD_PARAM);
                             break;
                         }
 
                         /* Is this the last section? */
                         if (device.auth.next_section == device.auth.max_section) {
-                            /* If we could really do authentication we'd have to
-                             * check the certificate here. Since we can't, just acknowledge
-                             * the packet later with an "everything OK" AckDevAuthenticationInfo
-                             * and change device.auth.state to AuthenticateState_CertificateDone
-                             */
                             device.auth.state = AUST_CERTALLRECEIVED;
                         } else {
                             device.auth.next_section++;
