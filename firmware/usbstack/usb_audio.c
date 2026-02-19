@@ -899,6 +899,18 @@ static void __attribute__((unused)) usb_audio_start_playback(void)
     audio_set_output_source(AUDIO_SRC_PLAYBACK);
 #endif
     logf("usbaudio: start playback at %lu Hz", hw_freq_sampr[as_playback_freq_idx]);
+
+    /* Configure DSP for sink mode (USB audio received from host) */
+    dsp = dsp_get_config(CODEC_IDX_AUDIO);
+    dsp_configure(dsp, DSP_RESET, 0);
+    dsp_configure(dsp, DSP_SET_STEREO_MODE, STEREO_INTERLEAVED);
+    dsp_configure(dsp, DSP_SET_SAMPLE_DEPTH, 16);
+#ifdef HAVE_PITCHCONTROL
+    sound_set_pitch(PITCH_SPEED_100);
+    dsp_set_timestretch(PITCH_SPEED_100);
+#endif
+    set_playback_sampling_frequency(HW_SAMPR_DEFAULT);
+
     mixer_set_frequency(hw_freq_sampr[as_playback_freq_idx]);
     pcm_apply_settings();
     mixer_channel_set_amplitude(PCM_MIXER_CHAN_USBAUDIO, MIX_AMP_UNITY);
@@ -987,11 +999,12 @@ static void source_buffer_hook(const void *start, size_t size)
         memcpy(tx_ring_buf, src + first, to_copy - first);
 
     tx_write_pos = (write + to_copy) % TX_RING_SIZE;
+    logf("src hook: %d bytes, ring %d/%d", to_copy, tx_write_pos, TX_RING_SIZE);
 }
 
 static void usb_audio_start_source(void)
 {
-    logf("usbaudio: start source at %lu Hz", hw_freq_sampr[as_source_freq_idx]);
+    logf("usbaudio: start source at %lu Hz ep=0x%02X", hw_freq_sampr[as_source_freq_idx], EP_ISO_SOURCE_IN);
     source_streaming = true;
     tx_write_pos = 0;
     tx_read_pos = 0;
@@ -1505,17 +1518,13 @@ void usb_audio_init_connection(void)
         return;
 
     usbaudio_active = true;
-    dsp = dsp_get_config(CODEC_IDX_AUDIO);
-    dsp_configure(dsp, DSP_RESET, 0);
-    dsp_configure(dsp, DSP_SET_STEREO_MODE, STEREO_INTERLEAVED);
-    dsp_configure(dsp, DSP_SET_SAMPLE_DEPTH, 16);
-#ifdef HAVE_PITCHCONTROL
-    sound_set_pitch(PITCH_SPEED_100);
-    dsp_set_timestretch(PITCH_SPEED_100);
-#endif
+
+    /* DSP setup deferred to usb_audio_start_playback() (sink mode only).
+     * In source mode, the codec's DSP must not be disturbed — it is
+     * actively processing audio that source mode captures via the
+     * mixer buffer hook. */
 
     usb_as_playback_intf_alt = 0;
-    set_playback_sampling_frequency(HW_SAMPR_DEFAULT);
     tmp_saved_vol = sound_current(SOUND_VOLUME);
     usb_audio_playing = false;
 
@@ -1718,11 +1727,13 @@ bool usb_audio_fast_transfer_complete(int ep, int dir, int status, int length)
                 memcpy(tx_send_buf + first, tx_ring_buf, frame_bytes - first);
             tx_read_pos = (read + frame_bytes) % TX_RING_SIZE;
 
+            logf("src tx: %d avail %d", frame_bytes, available);
             usb_drv_send_nonblocking(EP_ISO_SOURCE_IN, tx_send_buf, frame_bytes);
         }
         else
         {
             /* underflow: send silence to keep ISO chain alive */
+            logf("src tx: silence %d avail %d", frame_bytes, available);
             usb_drv_send_nonblocking(EP_ISO_SOURCE_IN, silence_buf, frame_bytes);
         }
         retval = true;

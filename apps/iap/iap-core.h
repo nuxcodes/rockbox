@@ -26,8 +26,8 @@
 #include "playlist.h"
 #include "iap.h"
 
-#define LOGF_ENABLE
-/* #undef LOGF_ENABLE */
+/* #define LOGF_ENABLE */
+#undef LOGF_ENABLE
 #ifdef LOGF_ENABLE
   #include "logf.h"
 #endif

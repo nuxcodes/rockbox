@@ -1159,7 +1159,9 @@ void iap_handlepkt_mode0(const unsigned int len, const unsigned char *buf)
             CHECKLEN(4);
             uint8_t tid_hi = buf[2];
             uint8_t tid_lo = buf[3];
+#ifdef LOGF_ENABLE
             logf("iap: StartIDPS tid=%02x%02x", tid_hi, tid_lo);
+#endif
 
             /* iPodAck with transaction ID: format per Table 3-5 */
             IAP_TX_INIT(0x00, 0x02);
@@ -1193,8 +1195,10 @@ void iap_handlepkt_mode0(const unsigned int len, const unsigned char *buf)
             int offset = 5; /* start of first FID token in buf */
             int i;
 
+#ifdef LOGF_ENABLE
             logf("iap: SetFIDTokenValues tid=%02x%02x n=%d",
                  tid_hi, tid_lo, num_tokens);
+#endif
 
             /* RetFIDTokenValueACKs (0x3A) with transID */
             IAP_TX_INIT(0x00, 0x3A);
@@ -1239,8 +1243,10 @@ void iap_handlepkt_mode0(const unsigned int len, const unsigned char *buf)
             uint8_t tid_hi = buf[2];
             uint8_t tid_lo = buf[3];
             uint8_t idps_status = buf[4];
+#ifdef LOGF_ENABLE
             logf("iap: EndIDPS tid=%02x%02x status=%d",
                  tid_hi, tid_lo, idps_status);
+#endif
 
             if (idps_status == 0x00) /* AccEndIDPSStatusContinue */
             {

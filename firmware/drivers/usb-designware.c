@@ -1052,18 +1052,23 @@ static void usb_dw_handle_xfer_complete(int epnum, enum usb_dw_epdir epdir)
     {
         /* SNAK the disabled EP, otherwise IN tokens for this
            EP could raise unwanted EPMIS interrupts. Useful for
-           usbserial when there is no data to send. */
-        DWC_DIEPCTL(epnum) |= SNAK;
+           usbserial when there is no data to send.
+           Skip for isochronous EPs — they have no retry mechanism,
+           so a NAK would permanently break the transfer chain. */
+        if (((DWC_DIEPCTL(epnum) >> 18) & 3) != EPTYP_ISOCHRONOUS)
+        {
+            DWC_DIEPCTL(epnum) |= SNAK;
 
 #ifdef USB_DW_SHARED_FIFO
-        /* See usb-s5l8701.c */
-        if (usb_dw_config.use_ptxfifo_as_plain_buffer)
-        {
-            int dtxfnum = GET_DTXFNUM(epnum);
-            if (dtxfnum)
-                usb_dw_flush_fifo(TXFFLSH, dtxfnum);
-        }
+            /* See usb-s5l8701.c */
+            if (usb_dw_config.use_ptxfifo_as_plain_buffer)
+            {
+                int dtxfnum = GET_DTXFNUM(epnum);
+                if (dtxfnum)
+                    usb_dw_flush_fifo(TXFFLSH, dtxfnum);
+            }
 #endif
+        }
     }
     else
     {
