@@ -232,9 +232,16 @@ static void iap_hid_tx(const unsigned char *buf, int len)
 /*
  * Process received iAP data from a SET_REPORT request.
  * Extract the Report ID, look up actual payload size from the
- * report descriptor table, and feed only valid bytes through
- * iap_getc() (avoids feeding zero-padding to the iAP parser).
+ * report descriptor table, and feed valid bytes through iap_getc().
+ *
+ * iAP packets larger than one HID report (e.g. 128-byte RSA signatures)
+ * are fragmented across multiple SET_REPORT transfers. The first report
+ * contains the 0x55 sync marker; continuation reports do not.
+ * We feed continuation data directly to iap_getc() since the iAP parser
+ * state machine already tracks how many bytes it needs.
  */
+static bool iap_hid_rx_in_progress = false;
+
 static void iap_hid_process_rx(const unsigned char *data, int len)
 {
     int i;
@@ -268,10 +275,7 @@ static void iap_hid_process_rx(const unsigned char *data, int len)
          len > 5 ? data[5] : 0, len > 6 ? data[6] : 0,
          len > 7 ? data[7] : 0);
 
-    /* iAP over USB HID: the 0xFF sync byte from serial framing is
-     * replaced with 0x00 in the HID transport. The iAP parser expects
-     * 0xFF 0x55 to start a frame. Find the 0x55 sync marker in the
-     * payload, inject 0xFF before it, then feed the rest. */
+    /* Look for 0x55 sync marker in payload (after report ID byte) */
     int sync_offset = -1;
     for (i = 0; i < payload_len; i++)
     {
@@ -282,17 +286,28 @@ static void iap_hid_process_rx(const unsigned char *data, int len)
         }
     }
 
-    if (sync_offset < 0)
-        return; /* no sync found, skip this report */
-
-    /* inject the 0xFF sync byte that the iAP parser needs */
-    iap_getc(0xFF);
-
-    /* feed from the 0x55 onwards */
-    for (i = sync_offset; i < payload_len; i++)
+    if (sync_offset >= 0)
     {
-        iap_getc(data[1 + i]);
+        /* New iAP packet: inject 0xFF sync byte and feed from 0x55 */
+        iap_hid_rx_in_progress = true;
+        iap_getc(0xFF);
+        for (i = sync_offset; i < payload_len; i++)
+        {
+            iap_getc(data[1 + i]);
+        }
     }
+    else if (iap_hid_rx_in_progress)
+    {
+        /* Continuation of a multi-report iAP packet.
+         * Feed all payload bytes to the iAP parser which tracks
+         * how many bytes it still needs based on the length field
+         * from the first report. */
+        for (i = 0; i < payload_len; i++)
+        {
+            iap_getc(data[1 + i]);
+        }
+    }
+    /* else: no sync found and not in a packet — ignore */
 }
 
 /* ===== USB Class Driver Interface ===== */
@@ -346,6 +361,7 @@ void usb_iap_hid_disconnect(void)
 {
     logf("iap_hid: disconnect");
     iap_hid_active = false;
+    iap_hid_rx_in_progress = false;
 
     /* restore serial transport */
     iap_transport_send = saved_transport_send;
