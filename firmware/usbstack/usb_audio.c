@@ -1028,15 +1028,14 @@ int usb_audio_set_interface(int intf, int alt)
     }
     if(intf == (usb_interface + 1))
     {
-        /* Source AS interface (config 2 is source-only) */
-        if(alt < 0 || alt > 1)
-        {
-            logf("usbaudio: source interface has no alternate %d", alt);
-            return -1;
-        }
+        /* Source AS interface (config 2 is source-only).
+         * Accept any non-zero alternate as "active streaming".
+         * The HA-2SE requests alt 3; real iPod Classic may expose
+         * multiple alternates for different formats. We only have
+         * one format so all non-zero alts map to the same config. */
         usb_as_source_intf_alt = alt;
 
-        if(usb_as_source_intf_alt == 1)
+        if(usb_as_source_intf_alt > 0)
             usb_audio_start_source();
         else
             usb_audio_stop_source();
