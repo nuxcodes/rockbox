@@ -779,8 +779,16 @@ void iap_periodic(void)
              * Since we do not really care about the content of the
              * challenge we just use the first 20 bytes of whatever
              * is in the RX buffer right now.
+             *
+             * In IDPS mode, include the transID saved from the last
+             * RetDevAuthenticationInfo (0x15). The Go daemon does the
+             * same via ipod.Respond which echoes the request's transID.
              */
             IAP_TX_INIT(0x00, 0x17);
+            if (device.auth.idps) {
+                IAP_TX_PUT(device.auth.tid_hi);
+                IAP_TX_PUT(device.auth.tid_lo);
+            }
             IAP_TX_PUT_DATA(iap_rxstart,
                         (device.auth.version == 0x100) ? 16 : 20);
             IAP_TX_PUT(0x01);

@@ -677,12 +677,16 @@ void iap_handlepkt_mode0(const unsigned int len, const unsigned char *buf)
                 break;
             }
 
-            /* Detect transaction ID: valid auth major is 0x01 or 0x02.
-             * If buf[2] is neither, there's a 2-byte transID before the
-             * version (IDPS mode). */
+            /* In IDPS mode, a 2-byte transID precedes the auth data.
+             * All responses must echo it. */
             int off = 2;
-            if (buf[2] != 0x01 && buf[2] != 0x02) {
+            uint8_t tid_hi = 0, tid_lo = 0;
+            if (device.auth.idps) {
                 off = 4;
+                tid_hi = buf[2];
+                tid_lo = buf[3];
+                device.auth.tid_hi = tid_hi;
+                device.auth.tid_lo = tid_lo;
                 CHECKLEN(6);
             }
 
@@ -693,6 +697,9 @@ void iap_handlepkt_mode0(const unsigned int len, const unsigned char *buf)
                 iap_reset_auth(&(device.auth));
 
                 IAP_TX_INIT(0x00, 0x16);
+                if (device.auth.idps) {
+                    IAP_TX_PUT(tid_hi); IAP_TX_PUT(tid_lo);
+                }
                 IAP_TX_PUT(0x08);
 
                 iap_send_tx();
@@ -701,7 +708,7 @@ void iap_handlepkt_mode0(const unsigned int len, const unsigned char *buf)
             if (device.auth.version == 0x100) {
                 device.auth.state = AUST_CERTALLRECEIVED;
             } else {
-                /* Version 2.00 requires at least one byte of certificate data */
+                /* Version 2.00 requires cert data */
                 CHECKLEN(off + 5);
                 switch (device.auth.state)
                 {
@@ -714,38 +721,53 @@ void iap_handlepkt_mode0(const unsigned int len, const unsigned char *buf)
                     }
                     case AUST_CERTBEG:
                     {
-                        /* Check if this is the expected section */
                         if (buf[off + 2] != device.auth.next_section) {
-                            cmd_ack(cmd, IAP_ACK_BAD_PARAM);
+                            IAP_TX_INIT(0x00, 0x02);
+                            if (device.auth.idps) {
+                                IAP_TX_PUT(tid_hi); IAP_TX_PUT(tid_lo);
+                            }
+                            IAP_TX_PUT(IAP_ACK_BAD_PARAM);
+                            IAP_TX_PUT(cmd);
+                            iap_send_tx();
                             break;
                         }
 
-                        /* Is this the last section? */
                         if (device.auth.next_section == device.auth.max_section) {
                             device.auth.state = AUST_CERTALLRECEIVED;
                         } else {
                             device.auth.next_section++;
-                            cmd_ok(cmd);
+                            IAP_TX_INIT(0x00, 0x02);
+                            if (device.auth.idps) {
+                                IAP_TX_PUT(tid_hi); IAP_TX_PUT(tid_lo);
+                            }
+                            IAP_TX_PUT(IAP_ACK_OK);
+                            IAP_TX_PUT(cmd);
+                            iap_send_tx();
                         }
                         break;
                     }
                     default:
                     {
-                        cmd_ack(cmd, IAP_ACK_BAD_PARAM);
+                        IAP_TX_INIT(0x00, 0x02);
+                        if (device.auth.idps) {
+                            IAP_TX_PUT(tid_hi); IAP_TX_PUT(tid_lo);
+                        }
+                        IAP_TX_PUT(IAP_ACK_BAD_PARAM);
+                        IAP_TX_PUT(cmd);
+                        iap_send_tx();
                         break;
                     }
                 }
             }
             if (device.auth.state == AUST_CERTALLRECEIVED) {
-                /* We've received all the certificate data so just
-                 * acknowledge everything OK.
-                 * Do NOT send GetAccessoryInfo (0x27) back-to-back here
-                 * because tx_buf is shared with nonblocking USB sends.
-                 * The Go daemon also skips GetAccessoryInfo at this point.
-                 * Periodic handler will send GetDevAuthenticationSignature
+                /* All certificate data received. ACK OK.
+                 * Periodic handler sends GetDevAuthenticationSignature
                  * (0x17) on the next tick via AUST_CERTDONE.
                  */
                 IAP_TX_INIT(0x00, 0x16);
+                if (device.auth.idps) {
+                    IAP_TX_PUT(tid_hi); IAP_TX_PUT(tid_lo);
+                }
                 IAP_TX_PUT(0x00);
 
                 iap_send_tx();
@@ -798,10 +820,18 @@ void iap_handlepkt_mode0(const unsigned int len, const unsigned char *buf)
                 break;
             }
 
-            /* Here we could check the signature. Since we can't, just
-             * acknowledge and go to authenticated status
-             */
+            /* In IDPS mode, transID at buf[2..3]. Save it for the ACK. */
+            uint8_t tid_hi_18 = 0, tid_lo_18 = 0;
+            if (device.auth.idps && len > 4) {
+                tid_hi_18 = buf[2];
+                tid_lo_18 = buf[3];
+            }
+
+            /* We don't verify the signature — just ACK success */
             IAP_TX_INIT(0x00, 0x19);
+            if (device.auth.idps) {
+                IAP_TX_PUT(tid_hi_18); IAP_TX_PUT(tid_lo_18);
+            }
             IAP_TX_PUT(0x00);
 
             iap_send_tx();
@@ -1234,6 +1264,7 @@ void iap_handlepkt_mode0(const unsigned int len, const unsigned char *buf)
                 iap_reset_device(&device);
                 device.lingoes = BIT_N(0x00) | BIT_N(0x03) | BIT_N(0x0A);
                 device.do_power_notify = true;
+                device.auth.idps = true;
                 device.auth.state = AUST_INIT;
             }
             else if (idps_status == 0x01) /* Reset */

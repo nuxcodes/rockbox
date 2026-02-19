@@ -91,6 +91,9 @@ struct auth_t {
     unsigned char max_section;      /* The maximum number of certificate sections */
     unsigned char next_section;     /* The next expected section number */
     uint16_t version;               /* Authentication version */
+    bool idps;                      /* Auth initiated via IDPS (transIDs required) */
+    uint8_t tid_hi;                 /* Last transaction ID from accessory */
+    uint8_t tid_lo;
 };
 
 /* State of GetAccessoryInfo */
