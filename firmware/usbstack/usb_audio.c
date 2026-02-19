@@ -987,6 +987,7 @@ static void source_buffer_hook(const void *start, size_t size)
         space = read - write - 1;
 
     int to_copy = MIN((int)size, space);
+    to_copy &= ~3; /* round down to sample frame boundary (4 bytes) */
     if (to_copy <= 0)
         return;
 
