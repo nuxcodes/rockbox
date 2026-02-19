@@ -1197,6 +1197,8 @@ void iap_handlepkt_mode0(const unsigned int len, const unsigned char *buf)
                 uint8_t fid_type = buf[offset + 1];
                 uint8_t fid_subtype = buf[offset + 2];
 
+                /* ACK entry: [length][type][subtype][status] */
+                IAP_TX_PUT(0x03); /* length: type+subtype+status */
                 IAP_TX_PUT(fid_type);
                 IAP_TX_PUT(fid_subtype);
                 IAP_TX_PUT(0x00); /* status: accepted */
@@ -1238,22 +1240,25 @@ void iap_handlepkt_mode0(const unsigned int len, const unsigned char *buf)
                 IAP_TX_PUT(0x00); /* IDPSStatusOK */
                 iap_send_tx();
 
-                /* Set up device and start auth.
-                 * Periodic handler will send GetDevAuthenticationInfo (0x14)
-                 * when it sees AUST_INIT, matching the IdentifyDeviceLingoes
-                 * (0x13) flow.
+                /* Set up device and start auth immediately.
+                 * Send GetDevAuthenticationInfo (0x14) directly and set
+                 * AUST_CERTREQ so the periodic handler doesn't re-send.
+                 * This matches the ipod-gadget Go daemon behavior.
                  */
                 iap_reset_device(&device);
                 device.lingoes = BIT_N(0x00) | BIT_N(0x03) | BIT_N(0x0A);
                 device.do_power_notify = true;
-                device.auth.state = AUST_INIT;
+                device.auth.state = AUST_CERTREQ;
+
+                IAP_TX_INIT(0x00, 0x14);
+                iap_send_tx();
             }
             else if (idps_status == 0x01) /* Reset */
             {
                 IAP_TX_INIT(0x00, 0x3C);
                 IAP_TX_PUT(tid_hi);
                 IAP_TX_PUT(tid_lo);
-                IAP_TX_PUT(0x02); /* TimeLimitNotExceeded */
+                IAP_TX_PUT(0x04); /* IDPSStatusTimeLimitNotExceeded */
                 iap_send_tx();
             }
             else /* Abandon or unknown */
@@ -1261,7 +1266,7 @@ void iap_handlepkt_mode0(const unsigned int len, const unsigned char *buf)
                 IAP_TX_INIT(0x00, 0x3C);
                 IAP_TX_PUT(tid_hi);
                 IAP_TX_PUT(tid_lo);
-                IAP_TX_PUT(0x03); /* WillNotAccept */
+                IAP_TX_PUT(0x06); /* IDPSStatusWillNotAccept */
                 iap_send_tx();
             }
             break;
