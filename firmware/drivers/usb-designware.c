@@ -38,7 +38,7 @@
 #include "usb-designware.h"
 
 /* Define LOGF_ENABLE to enable logf output in this file */
-/*#define LOGF_ENABLE*/
+#define LOGF_ENABLE
 #include "logf.h"
 
 
@@ -806,6 +806,16 @@ static void usb_dw_epstart(int epnum, enum usb_dw_epdir epdir,
 #endif
 #ifdef USB_DW_SHARED_FIFO
         eptsiz |= MCCNT((ep_periodic_msk >> epnum) & 1);
+#else
+        /* Dedicated FIFO mode: MCCNT is still required for periodic
+         * (ISO/interrupt) IN endpoints — it specifies the number of
+         * packets per (micro)frame. Without it, MCCNT=0 means
+         * "transmit 0 packets" and XFRC never fires. */
+        {
+            uint32_t eptype = (DWC_DIEPCTL(epnum) >> 18) & 0x3;
+            if (eptype == EPTYP_ISOCHRONOUS || eptype == EPTYP_INTERRUPT)
+                eptsiz |= MCCNT(1);
+        }
 #endif
 
     }
@@ -832,6 +842,18 @@ static void usb_dw_epstart(int epnum, enum usb_dw_epdir epdir,
             DWC_EPCTL(epnum, epdir) |= EPENA | nak | SETD0PIDEF; /* even */
         else
             DWC_EPCTL(epnum, epdir) |= EPENA | nak | SETD1PIDOF; /* odd */
+
+        /* Diagnostic: dump register state after ISO EPENA */
+        if (epdir == USB_DW_EPDIR_IN)
+        {
+            logf("ISO IN%d: ctl=%08lx tsiz=%08lx dma=%08lx",
+                 epnum, (unsigned long)DWC_DIEPCTL(epnum),
+                 (unsigned long)DWC_DIEPTSIZ(epnum),
+                 (unsigned long)DWC_DIEPDMA(epnum));
+            logf("  DSTS=%08lx GINTSTS=%08lx DIEPINT=%08lx",
+                 (unsigned long)DWC_DSTS, (unsigned long)DWC_GINTSTS,
+                 (unsigned long)DWC_DIEPINT(epnum));
+        }
     }
     else
     {
@@ -1225,6 +1247,13 @@ static void usb_dw_irq(void)
 #endif /* USB_DW_ARCH_SLAVE */
 #endif /* USB_DW_SHARED_FIFO */
 
+    /* Incomplete isochronous IN transfer */
+    if (DWC_GINTSTS & IISOIXFR)
+    {
+        logf("IISOIXFR! DSTS=%08lx", (unsigned long)DWC_DSTS);
+        DWC_GINTSTS = IISOIXFR;
+    }
+
     daint = DWC_DAINT;
 
     /* IN */
@@ -1510,7 +1539,7 @@ static void usb_dw_init(void)
     DWC_DAINTMSK = 0xffffffff;
     usb_endpoints = DWC_DAINTMSK;
 
-    uint32_t gintmsk = USBRST|ENUMDNE|IEPINT|OEPINT;
+    uint32_t gintmsk = USBRST|ENUMDNE|IEPINT|OEPINT|IISOIXFR;
 #ifdef USB_DW_ARCH_SLAVE
     gintmsk |= RXFLVL;
 #endif
