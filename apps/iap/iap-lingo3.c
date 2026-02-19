@@ -38,6 +38,9 @@
 #include "settings.h"
 #include "metadata.h"
 #include "playback.h"
+#ifdef USB_ENABLE_AUDIO
+bool usb_audio_get_active(void);
+#endif
 #if CONFIG_TUNER
 #include "ipod_remote_tuner.h"
 #endif
@@ -480,7 +483,12 @@ void iap_handlepkt_mode3(const unsigned int len, const unsigned char *buf)
                         /* Mute status False*/
                         IAP_TX_PUT(0x00);
                         /* Volume */
-                        IAP_TX_PUT(0xFF & (int)((global_status.volume + 90) * 2.65625));
+#ifdef USB_ENABLE_AUDIO
+                        if (usb_audio_get_active())
+                            IAP_TX_PUT(0xFF);
+                        else
+#endif
+                            IAP_TX_PUT(0xFF & (int)((global_status.volume + 90) * 2.65625));
 
                     } else {
                         /* Mute status True*/
@@ -669,8 +677,18 @@ void iap_handlepkt_mode3(const unsigned int len, const unsigned char *buf)
                         /* Mute status False*/
                         IAP_TX_PUT(0x00);
                         /* Volume */
-                        IAP_TX_PUT(0xFF & (int)((global_status.volume + 90) * 2.65625));
-                        IAP_TX_PUT(0xFF & (int)((global_status.volume + 90) * 2.65625));
+#ifdef USB_ENABLE_AUDIO
+                        if (usb_audio_get_active())
+                        {
+                            IAP_TX_PUT(0xFF);
+                            IAP_TX_PUT(0xFF);
+                        }
+                        else
+#endif
+                        {
+                            IAP_TX_PUT(0xFF & (int)((global_status.volume + 90) * 2.65625));
+                            IAP_TX_PUT(0xFF & (int)((global_status.volume + 90) * 2.65625));
+                        }
 
                     } else {
                         /* Mute status True*/
@@ -803,6 +821,15 @@ void iap_handlepkt_mode3(const unsigned int len, const unsigned char *buf)
                 case 0x04:
                 {
                     CHECKLEN(5 + doff);
+#ifdef USB_ENABLE_AUDIO
+                    /* In source mode, volume is controlled by the
+                     * external DAC — don't modify Rockbox volume. */
+                    if (usb_audio_get_active())
+                    {
+                        cmd_ok(cmd);
+                        break;
+                    }
+#endif
                     if (buf[0x03 + doff]==0x00){
                         /* Not Muted */
                         global_status.volume = (int) (buf[0x04 + doff]/2.65625)-90;
@@ -977,6 +1004,13 @@ void iap_handlepkt_mode3(const unsigned int len, const unsigned char *buf)
                 case 0x10:
                 {
                     CHECKLEN(7 + doff);
+#ifdef USB_ENABLE_AUDIO
+                    if (usb_audio_get_active())
+                    {
+                        cmd_ok(cmd);
+                        break;
+                    }
+#endif
                     if (buf[0x03 + doff]==0x00){
                         /* Not Muted */
                         global_status.volume = (int) (buf[0x04 + doff]/2.65625)-90;

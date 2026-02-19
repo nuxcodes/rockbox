@@ -50,7 +50,7 @@
 
 #ifdef USB_ENABLE_AUDIO
 #include "usb_audio.h"
-#include "usb_audio_def.h" // DEBUG
+#include "usb_audio_def.h"
 #endif
 
 #ifdef USB_ENABLE_IAP_HID
