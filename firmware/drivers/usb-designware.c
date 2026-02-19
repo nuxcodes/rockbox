@@ -38,7 +38,7 @@
 #include "usb-designware.h"
 
 /* Define LOGF_ENABLE to enable logf output in this file */
-#define LOGF_ENABLE
+/* #define LOGF_ENABLE */
 #include "logf.h"
 
 
@@ -842,18 +842,6 @@ static void usb_dw_epstart(int epnum, enum usb_dw_epdir epdir,
             DWC_EPCTL(epnum, epdir) |= EPENA | nak | SETD0PIDEF; /* even */
         else
             DWC_EPCTL(epnum, epdir) |= EPENA | nak | SETD1PIDOF; /* odd */
-
-        /* Diagnostic: dump register state after ISO EPENA */
-        if (epdir == USB_DW_EPDIR_IN)
-        {
-            logf("ISO IN%d: ctl=%08lx tsiz=%08lx dma=%08lx",
-                 epnum, (unsigned long)DWC_DIEPCTL(epnum),
-                 (unsigned long)DWC_DIEPTSIZ(epnum),
-                 (unsigned long)DWC_DIEPDMA(epnum));
-            logf("  DSTS=%08lx GINTSTS=%08lx DIEPINT=%08lx",
-                 (unsigned long)DWC_DSTS, (unsigned long)DWC_GINTSTS,
-                 (unsigned long)DWC_DIEPINT(epnum));
-        }
     }
     else
     {

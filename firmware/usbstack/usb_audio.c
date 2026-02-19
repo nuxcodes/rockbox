@@ -44,7 +44,7 @@
 #include "pcm_mixer.h"
 #include "dsp_core.h"
 
-#define LOGF_ENABLE
+/* #define LOGF_ENABLE */
 #include "logf.h"
 
 // is there a "best practices" for converting between floats and fixed point?
@@ -999,7 +999,6 @@ static void source_buffer_hook(const void *start, size_t size)
         memcpy(tx_ring_buf, src + first, to_copy - first);
 
     tx_write_pos = (write + to_copy) % TX_RING_SIZE;
-    logf("src hook: %d bytes, ring %d/%d", to_copy, tx_write_pos, TX_RING_SIZE);
 }
 
 static void usb_audio_start_source(void)
@@ -1727,13 +1726,11 @@ bool usb_audio_fast_transfer_complete(int ep, int dir, int status, int length)
                 memcpy(tx_send_buf + first, tx_ring_buf, frame_bytes - first);
             tx_read_pos = (read + frame_bytes) % TX_RING_SIZE;
 
-            logf("src tx: %d avail %d", frame_bytes, available);
             usb_drv_send_nonblocking(EP_ISO_SOURCE_IN, tx_send_buf, frame_bytes);
         }
         else
         {
             /* underflow: send silence to keep ISO chain alive */
-            logf("src tx: silence %d avail %d", frame_bytes, available);
             usb_drv_send_nonblocking(EP_ISO_SOURCE_IN, silence_buf, frame_bytes);
         }
         retval = true;
