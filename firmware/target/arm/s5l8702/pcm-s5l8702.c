@@ -145,6 +145,10 @@ void pcm_play_dma_start(const void* addr, size_t size)
 {
     pcm_play_dma_stop();
 
+    /* un-gate I2S clock before starting DMA */
+    PWRCON(1) &= ~(1 << 7);
+    I2SCLKCON = 1;
+
     pcm_remaining = size;
     I2STXCOM = 0xe;
     dma_play_callback((void*)addr);
@@ -154,6 +158,10 @@ void pcm_play_dma_stop(void)
 {
     dmac_ch_stop(&dma_play_ch);
     I2STXCOM = 0xa;
+
+    /* gate I2S clock to save power when idle */
+    I2SCLKCON = 0;
+    PWRCON(1) |= (1 << 7);
 }
 
 /* MCLK = 12MHz (MCLKDIV2=1), [CS42L55 DS, s4.8] */

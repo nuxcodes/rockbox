@@ -145,6 +145,35 @@ void audiohw_enable_lineout(bool enable)
                         PWRCTL2_PDN_LINA_ALWAYS | PWRCTL2_PDN_LINB_ALWAYS);
 }
 
+void audiohw_set_hp_power(bool enable)
+{
+    if (enable)
+        cscodec_setbits(PWRCTL2, PWRCTL2_PDN_HPA_MASK | PWRCTL2_PDN_HPB_MASK,
+                        PWRCTL2_PDN_HPA_NEVER | PWRCTL2_PDN_HPB_NEVER);
+    else
+        cscodec_setbits(PWRCTL2, PWRCTL2_PDN_HPA_MASK | PWRCTL2_PDN_HPB_MASK,
+                        PWRCTL2_PDN_HPA_ALWAYS | PWRCTL2_PDN_HPB_ALWAYS);
+}
+
+void audiohw_idle_powerdown(void)
+{
+    audiohw_mute(true);
+    /* Master mute prevents pop; don't touch HPACTL/HPBCTL —
+     * CS42L55 preserves register values during PDN_CODEC */
+    cscodec_write(PWRCTL1, PWRCTL1_PDN_CHRG | PWRCTL1_PDN_ADCA
+                         | PWRCTL1_PDN_ADCB | PWRCTL1_PDN_CODEC);
+}
+
+void audiohw_idle_powerup(void)
+{
+    /* Clear PDN_CODEC — registers are maintained during power-down */
+    cscodec_write(PWRCTL1, PWRCTL1_PDN_CHRG | PWRCTL1_PDN_ADCA
+                         | PWRCTL1_PDN_ADCB);
+    /* CS42L55 DAC needs ~100us to stabilize after power-up */
+    udelay(200);
+    audiohw_mute(false);
+}
+
 static void handle_dsp_power(int dsp_module, bool onoff)
 {
     if (onoff)

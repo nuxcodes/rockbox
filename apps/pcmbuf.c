@@ -40,6 +40,9 @@
 #include "settings.h"
 #include "audio.h"
 #include "voice_thread.h"
+#ifdef HAVE_CS42L55
+#include "audiohw.h"
+#endif
 
 /* 2 channels * 2 bytes/sample, interleaved */
 #define PCMBUF_SAMPLE_SIZE   (2 * 2)
@@ -835,6 +838,10 @@ void pcmbuf_play_start(void)
     if (mixer_channel_status(PCM_MIXER_CHAN_PLAYBACK) == CHANNEL_STOPPED &&
         chunk_widx != chunk_ridx)
     {
+#ifdef HAVE_CS42L55
+        /* Power up codec DAC before starting I2S/DMA */
+        audiohw_idle_powerup();
+#endif
         current_desc = NULL;
         mixer_channel_play_data(PCM_MIXER_CHAN_PLAYBACK, pcmbuf_pcm_callback,
                                 NULL, 0);
@@ -848,6 +855,11 @@ void pcmbuf_play_stop(void)
 
     /* Reset channel */
     mixer_channel_stop(PCM_MIXER_CHAN_PLAYBACK);
+
+#ifdef HAVE_CS42L55
+    /* Power down codec DAC after I2S/DMA has stopped */
+    audiohw_idle_powerdown();
+#endif
 
     /* Reset buffer */
     init_buffer_state();

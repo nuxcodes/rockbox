@@ -43,6 +43,9 @@
 #include "core_alloc.h"
 #include "pcm_mixer.h"
 #include "dsp_core.h"
+#ifdef HAVE_CS42L55
+#include "audiohw.h"
+#endif
 
 /* #define LOGF_ENABLE */
 #include "logf.h"
@@ -1026,6 +1029,11 @@ static void usb_audio_start_source(void)
     /* start the ISO IN chain with a silence frame */
     int frame_bytes = source_frame_bytes();
     usb_drv_send_nonblocking(EP_ISO_SOURCE_IN, silence_buf, frame_bytes);
+
+#ifdef HAVE_CS42L55
+    /* Power down headphone amps — audio goes over USB, not the jack */
+    audiohw_set_hp_power(false);
+#endif
 }
 
 static void usb_audio_stop_source(void)
@@ -1033,6 +1041,11 @@ static void usb_audio_stop_source(void)
     logf("usbaudio: stop source");
     source_streaming = false;
     mixer_channel_set_buffer_hook(PCM_MIXER_CHAN_PLAYBACK, NULL);
+
+#ifdef HAVE_CS42L55
+    /* Restore headphone amp power — HP volume regs are intact */
+    audiohw_set_hp_power(true);
+#endif
 }
 
 int usb_audio_set_interface(int intf, int alt)
