@@ -184,6 +184,9 @@ unsigned char lingo_versions[32][2] = {
 #else
     {0, 0},     /* RF Receiver lingo, 0x07 disabled */
 #endif
+    {0, 0},     /* Accessory Equalizer lingo, 0x08, disabled */
+    {0, 0},     /* Reserved, 0x09 */
+    {1, 0},     /* Digital Audio lingo, 0x0A */
     {}          /* every other lingo, disabled */
 };
 
@@ -350,6 +353,7 @@ void iap_reset_device(struct device_t* device)
     device->accinfo = ACCST_NONE;
     device->capabilities = 0;
     device->capabilities_queried = 0;
+    device->audio_init_pending = false;
 }
 
 static int iap_task(struct timeout *tmo)
@@ -804,6 +808,20 @@ void iap_periodic(void)
         }
     }
 
+    /* Digital audio activation after IDPS auth */
+    if (device.audio_init_pending && DEVICE_AUTHENTICATED)
+    {
+        device.audio_init_pending = false;
+
+        IAP_TX_INIT(0x0A, 0x02);
+        if (device.auth.idps) {
+            /* Generate outgoing transID (doesn't need to match anything) */
+            IAP_TX_PUT(0x00);
+            IAP_TX_PUT(0x01);
+        }
+        iap_send_tx();
+    }
+
     /* Time out button down events */
     if (iap_timeoutbtn)
         iap_timeoutbtn -= 1;
@@ -912,6 +930,10 @@ void iap_periodic(void)
             device.accinfo = ACCST_SENT;
         }
     }
+
+    /* After IDPS, do not send unsolicited notifications — they lack
+     * transIDs and the Go daemon reference doesn't send them either. */
+    if (device.auth.idps) return;
 
     if (!device.do_notify) return;
     if ((device.notifications == 0) && (interface_state != IST_EXTENDED)) return;
@@ -1298,6 +1320,46 @@ static void iap_handlepkt_mode5(const unsigned int len, const unsigned char *buf
     }
 }
 
+/* Digital Audio lingo (0x0A) handler */
+static void iap_handlepkt_mode10(const unsigned int len, const unsigned char *buf)
+{
+    unsigned int cmd = buf[1];
+    int off = 2;
+    uint8_t tid_hi = 0, tid_lo = 0;
+
+    if (device.auth.idps && len > 4) {
+        off = 4;
+        tid_hi = buf[2];
+        tid_lo = buf[3];
+    }
+
+    switch (cmd)
+    {
+        /* AccAck (0x00) — ignore */
+        case 0x00:
+            break;
+
+        /* RetAccSampleRateCaps (0x03) — respond with TrackNewAudioAttributes */
+        case 0x03:
+        {
+            (void)off;
+            IAP_TX_INIT(0x0A, 0x04);
+            if (device.auth.idps) {
+                IAP_TX_PUT(tid_hi);
+                IAP_TX_PUT(tid_lo);
+            }
+            IAP_TX_PUT_U32(44100);  /* sample rate */
+            IAP_TX_PUT_U32(0);      /* sound check value */
+            IAP_TX_PUT_U32(0);      /* volume adjustment */
+            iap_send_tx();
+            break;
+        }
+
+        default:
+            break;
+    }
+}
+
 void iap_handlepkt(void)
 {
     int level;
@@ -1334,6 +1396,7 @@ void iap_handlepkt(void)
 #if CONFIG_TUNER
         case 7: iap_handlepkt_mode7(length, iap_rxstart+2); break;
 #endif
+        case 10: iap_handlepkt_mode10(length, iap_rxstart+2); break;
         }
     }
 

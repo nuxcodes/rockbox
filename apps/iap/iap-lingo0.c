@@ -836,16 +836,12 @@ void iap_handlepkt_mode0(const unsigned int len, const unsigned char *buf)
 
             iap_send_tx();
             device.auth.state = AUST_AUTH;
-#if CONFIG_TUNER
-            if (radio_present == 1)
-            {
-                /* GetTunerCaps */
-                IAP_TX_INIT(0x07, 0x01);
 
-                iap_send_tx();
-            }
-#endif
-            iap_set_remote_volume();
+            /* After IDPS auth, initiate digital audio via periodic handler.
+             * Do NOT call iap_set_remote_volume() or any other send here —
+             * tx_buf is shared and 0x19 hasn't finished DMA yet. */
+            if (device.auth.idps && DEVICE_LINGO_SUPPORTED(0x0A))
+                device.audio_init_pending = true;
 
             break;
         }

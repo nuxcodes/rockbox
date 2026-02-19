@@ -149,6 +149,7 @@ struct device_t {
                                      * of GetAccessoryInfo
                                      */
     uint32_t capabilities_queried;  /* Capabilities already queried */
+    bool audio_init_pending;        /* Send GetAccSampleRateCaps after auth */
 };
 
 extern struct device_t device;

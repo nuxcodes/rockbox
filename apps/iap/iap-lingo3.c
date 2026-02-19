@@ -254,8 +254,17 @@ void iap_handlepkt_mode3(const unsigned int len, const unsigned char *buf)
         case 0x08:
         {
             struct tm* tm;
+            int doff = 2;       /* data offset past transID if present */
+            uint8_t t3hi = 0, t3lo = 0;
 
-            CHECKLEN(6);
+            if (device.auth.idps) {
+                doff = 4;
+                CHECKLEN(8);    /* lingo + cmd + transID(2) + mask(4) */
+                t3hi = buf[2];
+                t3lo = buf[3];
+            } else {
+                CHECKLEN(6);    /* lingo + cmd + mask(4) */
+            }
             CHECKAUTH;
 
             /* Save the current state of the various attributes we track */
@@ -287,11 +296,19 @@ void iap_handlepkt_mode3(const unsigned int len, const unsigned char *buf)
             /* Get the notification bits */
             device.do_notify = false;
             device.changed_notifications = 0;
-            device.notifications = get_u32(&buf[0x02]);
+            device.notifications = get_u32(&buf[doff]);
             if (device.notifications)
                 device.do_notify = true;
 
-            cmd_ok(cmd);
+            /* ACK with transID if IDPS */
+            IAP_TX_INIT(0x03, 0x00);
+            if (device.auth.idps) {
+                IAP_TX_PUT(t3hi);
+                IAP_TX_PUT(t3lo);
+            }
+            IAP_TX_PUT(IAP_ACK_OK);
+            IAP_TX_PUT(cmd);
+            iap_send_tx();
             break;
         }
 
