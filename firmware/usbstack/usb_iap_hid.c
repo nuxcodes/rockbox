@@ -231,83 +231,103 @@ static void iap_hid_tx(const unsigned char *buf, int len)
 
 /*
  * Process received iAP data from a SET_REPORT request.
- * Extract the Report ID, look up actual payload size from the
- * report descriptor table, and feed valid bytes through iap_getc().
+ *
+ * HID report wire format (per Apple iAP-over-HID / ipod-gadget reference):
+ *   Byte 0: Report ID
+ *   Byte 1: Link Control (fragmentation indicator)
+ *   Byte 2+: iAP frame data
+ *
+ * Link Control values:
+ *   0x00  Single complete report (no fragmentation)
+ *   0x02  First fragment (more to follow)
+ *   0x03  Middle fragment (continuation, more to follow)
+ *   0x01  Last fragment (continuation, done)
  *
  * iAP packets larger than one HID report (e.g. 128-byte RSA signatures)
- * are fragmented across multiple SET_REPORT transfers. The first report
- * contains the 0x55 sync marker; continuation reports do not.
- * We feed continuation data directly to iap_getc() since the iAP parser
- * state machine already tracks how many bytes it needs.
+ * are fragmented across multiple SET_REPORT transfers. Only the first
+ * report contains the 0x55 sync marker. Continuation reports must NOT
+ * be scanned for 0x55 since signature data may contain that byte value.
  */
 static bool iap_hid_rx_in_progress = false;
 
 static void iap_hid_process_rx(const unsigned char *data, int len)
 {
     int i;
-    int payload_len;
 
-    if (len < 2)
+    if (len < 3)
         return;
 
-    /* first byte is Report ID — look up the actual payload size */
     uint8_t report_id = data[0];
-    payload_len = len - 1; /* fallback: use full length minus report ID */
+    uint8_t link_ctrl = data[1];
+
+    /* iAP data starts after report ID and link control byte.
+     * Max payload per report = report_size - 1 (link control takes 1 byte).
+     */
+    int iap_len = len - 2;
 
     for (i = 0; i < NUM_OUT_REPORTS; i++)
     {
         if (out_report_sizes[i].id == report_id)
         {
-            payload_len = out_report_sizes[i].size;
+            iap_len = out_report_sizes[i].size - 1;
             break;
         }
     }
 
     /* clamp to what we actually received */
-    if (payload_len > len - 1)
-        payload_len = len - 1;
+    if (iap_len > len - 2)
+        iap_len = len - 2;
 
     logf("iap_hid: rx id=%d len=%d wLen=%d",
-         report_id, payload_len, len);
+         report_id, iap_len, len);
     logf("iap_hid: [%02x %02x %02x %02x %02x %02x %02x %02x]",
          data[0], len > 1 ? data[1] : 0, len > 2 ? data[2] : 0,
          len > 3 ? data[3] : 0, len > 4 ? data[4] : 0,
          len > 5 ? data[5] : 0, len > 6 ? data[6] : 0,
          len > 7 ? data[7] : 0);
 
-    /* Look for 0x55 sync marker in payload (after report ID byte) */
-    int sync_offset = -1;
-    for (i = 0; i < payload_len; i++)
+    const unsigned char *iap_data = data + 2;
+
+    switch (link_ctrl & 0x03)
     {
-        if (data[1 + i] == 0x55)
+        case 0x00: /* single complete report */
+        case 0x02: /* first fragment */
         {
-            sync_offset = i;
+            /* Look for 0x55 sync marker in iAP data */
+            int sync_offset = -1;
+            for (i = 0; i < iap_len; i++)
+            {
+                if (iap_data[i] == 0x55)
+                {
+                    sync_offset = i;
+                    break;
+                }
+            }
+
+            if (sync_offset >= 0)
+            {
+                iap_hid_rx_in_progress = (link_ctrl == 0x02);
+                iap_getc(0xFF);
+                for (i = sync_offset; i < iap_len; i++)
+                    iap_getc(iap_data[i]);
+            }
+            break;
+        }
+
+        case 0x03: /* middle fragment */
+        case 0x01: /* last fragment */
+        {
+            if (iap_hid_rx_in_progress)
+            {
+                for (i = 0; i < iap_len; i++)
+                    iap_getc(iap_data[i]);
+
+                if (link_ctrl == 0x01)
+                    iap_hid_rx_in_progress = false;
+            }
             break;
         }
     }
-
-    if (sync_offset >= 0)
-    {
-        /* New iAP packet: inject 0xFF sync byte and feed from 0x55 */
-        iap_hid_rx_in_progress = true;
-        iap_getc(0xFF);
-        for (i = sync_offset; i < payload_len; i++)
-        {
-            iap_getc(data[1 + i]);
-        }
-    }
-    else if (iap_hid_rx_in_progress)
-    {
-        /* Continuation of a multi-report iAP packet.
-         * Feed all payload bytes to the iAP parser which tracks
-         * how many bytes it still needs based on the length field
-         * from the first report. */
-        for (i = 0; i < payload_len; i++)
-        {
-            iap_getc(data[1 + i]);
-        }
-    }
-    /* else: no sync found and not in a packet — ignore */
 }
 
 /* ===== USB Class Driver Interface ===== */
