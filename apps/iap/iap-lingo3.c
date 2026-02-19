@@ -63,9 +63,18 @@
             return; \
         }} while(0)
 
+/* File-scope transID for the current lingo 0x03 packet.
+ * Parsed at the top of iap_handlepkt_mode3() and used by
+ * cmd_ack() and L3_TX_TRANSID() in all handlers. */
+static uint8_t l3_tid_hi, l3_tid_lo;
+
 static void cmd_ack(const unsigned char cmd, const unsigned char status)
 {
     IAP_TX_INIT(0x03, 0x00);
+    if (device.auth.idps) {
+        IAP_TX_PUT(l3_tid_hi);
+        IAP_TX_PUT(l3_tid_lo);
+    }
     IAP_TX_PUT(status);
     IAP_TX_PUT(cmd);
 
@@ -74,9 +83,24 @@ static void cmd_ack(const unsigned char cmd, const unsigned char status)
 
 #define cmd_ok(cmd) cmd_ack((cmd), IAP_ACK_OK)
 
+/* Insert transID into a TX response packet after IAP_TX_INIT */
+#define L3_TX_TRANSID() do { \
+        if (device.auth.idps) { \
+            IAP_TX_PUT(l3_tid_hi); \
+            IAP_TX_PUT(l3_tid_lo); \
+        }} while(0)
+
 void iap_handlepkt_mode3(const unsigned int len, const unsigned char *buf)
 {
     unsigned int cmd = buf[1];
+
+    /* Extra data offset for IDPS transID (0 or 2).  All buf[] data
+     * accesses and CHECKLEN values inside the switch must add doff
+     * so the same code works for both legacy and IDPS packets. */
+    unsigned int doff = 0;
+
+    l3_tid_hi = 0;
+    l3_tid_lo = 0;
 
     /* We expect at least two bytes in the buffer, one for the
      * state bits.
@@ -87,6 +111,16 @@ void iap_handlepkt_mode3(const unsigned int len, const unsigned char *buf)
     if (!DEVICE_LINGO_SUPPORTED(0x03)) {
         cmd_ack(cmd, IAP_ACK_BAD_PARAM);
         return;
+    }
+
+    /* After IDPS, all packets include a 2-byte transID after the
+     * command byte.  Extract it and set doff so all data-reading
+     * offsets and CHECKLENs are adjusted correctly. */
+    if (device.auth.idps) {
+        CHECKLEN(4);    /* lingo + cmd + transID(2) minimum */
+        l3_tid_hi = buf[2];
+        l3_tid_lo = buf[3];
+        doff = 2;
     }
 
     switch (cmd)
@@ -115,6 +149,7 @@ void iap_handlepkt_mode3(const unsigned int len, const unsigned char *buf)
         case 0x01:
         {
             IAP_TX_INIT(0x03, 0x02);
+            L3_TX_TRANSID();
             IAP_TX_PUT_U32(0x00);
 
             iap_send_tx();
@@ -148,9 +183,9 @@ void iap_handlepkt_mode3(const unsigned int len, const unsigned char *buf)
         {
             uint32_t index;
 
-            CHECKLEN(7);
+            CHECKLEN(7 + doff);
 
-            index = get_u32(&buf[2]);
+            index = get_u32(&buf[2 + doff]);
 
             if (index > 0) {
                 cmd_ack(cmd, IAP_ACK_BAD_PARAM);
@@ -181,6 +216,7 @@ void iap_handlepkt_mode3(const unsigned int len, const unsigned char *buf)
         case 0x04:
         {
             IAP_TX_INIT(0x03, 0x05);
+            L3_TX_TRANSID();
             /* Return one profile (0, the disabled profile) */
             IAP_TX_PUT_U32(0x01);
 
@@ -219,15 +255,16 @@ void iap_handlepkt_mode3(const unsigned int len, const unsigned char *buf)
         {
             uint32_t index;
 
-            CHECKLEN(6);
+            CHECKLEN(6 + doff);
 
-            index = get_u32(&buf[2]);
+            index = get_u32(&buf[2 + doff]);
 
             if (index > 0) {
                 cmd_ack(cmd, IAP_ACK_BAD_PARAM);
                 break;
             }
             IAP_TX_INIT(0x03, 0x07);
+            L3_TX_TRANSID();
             IAP_TX_PUT_STRING("Default");
 
             iap_send_tx();
@@ -254,17 +291,8 @@ void iap_handlepkt_mode3(const unsigned int len, const unsigned char *buf)
         case 0x08:
         {
             struct tm* tm;
-            int doff = 2;       /* data offset past transID if present */
-            uint8_t t3hi = 0, t3lo = 0;
 
-            if (device.auth.idps) {
-                doff = 4;
-                CHECKLEN(8);    /* lingo + cmd + transID(2) + mask(4) */
-                t3hi = buf[2];
-                t3lo = buf[3];
-            } else {
-                CHECKLEN(6);    /* lingo + cmd + mask(4) */
-            }
+            CHECKLEN(6 + doff);
             CHECKAUTH;
 
             /* Save the current state of the various attributes we track */
@@ -296,19 +324,11 @@ void iap_handlepkt_mode3(const unsigned int len, const unsigned char *buf)
             /* Get the notification bits */
             device.do_notify = false;
             device.changed_notifications = 0;
-            device.notifications = get_u32(&buf[doff]);
+            device.notifications = get_u32(&buf[0x02 + doff]);
             if (device.notifications)
                 device.do_notify = true;
 
-            /* ACK with transID if IDPS */
-            IAP_TX_INIT(0x03, 0x00);
-            if (device.auth.idps) {
-                IAP_TX_PUT(t3hi);
-                IAP_TX_PUT(t3lo);
-            }
-            IAP_TX_PUT(IAP_ACK_OK);
-            IAP_TX_PUT(cmd);
-            iap_send_tx();
+            cmd_ok(cmd);
             break;
         }
 
@@ -340,6 +360,7 @@ void iap_handlepkt_mode3(const unsigned int len, const unsigned char *buf)
         {
             CHECKAUTH;
             IAP_TX_INIT(0x03, 0x0B);
+            L3_TX_TRANSID();
             IAP_TX_PUT_U32(device.changed_notifications);
 
             iap_send_tx();
@@ -380,13 +401,14 @@ void iap_handlepkt_mode3(const unsigned int len, const unsigned char *buf)
             int play_status;
             struct tm* tm;
 
-            CHECKLEN(3);
+            CHECKLEN(3 + doff);
             CHECKAUTH;
 
             IAP_TX_INIT(0x03, 0x0D);
-            IAP_TX_PUT(buf[0x02]);
+            L3_TX_TRANSID();
+            IAP_TX_PUT(buf[0x02 + doff]);
 
-            switch (buf[0x02])
+            switch (buf[0x02 + doff])
             {
                 /* 0x00: Track position
                  * Data length: 4
@@ -696,9 +718,9 @@ void iap_handlepkt_mode3(const unsigned int len, const unsigned char *buf)
          */
         case 0x0E:
         {
-            CHECKLEN(3);
+            CHECKLEN(3 + doff);
             CHECKAUTH;
-            switch (buf[0x02])
+            switch (buf[0x02 + doff])
             {
                 /* Track position (ms)
                  * Data length: 4
@@ -707,8 +729,8 @@ void iap_handlepkt_mode3(const unsigned int len, const unsigned char *buf)
                 {
                     uint32_t pos;
 
-                    CHECKLEN(7);
-                    pos = get_u32(&buf[0x03]);
+                    CHECKLEN(7 + doff);
+                    pos = get_u32(&buf[0x03 + doff]);
                     audio_ff_rewind(pos);
 
                     cmd_ok(cmd);
@@ -722,8 +744,8 @@ void iap_handlepkt_mode3(const unsigned int len, const unsigned char *buf)
                 {
                     uint32_t index;
 
-                    CHECKLEN(7);
-                    index = get_u32(&buf[0x03]);
+                    CHECKLEN(7 + doff);
+                    index = get_u32(&buf[0x03 + doff]);
                     audio_skip(index-iap_get_trackindex());
 
                     cmd_ok(cmd);
@@ -745,8 +767,8 @@ void iap_handlepkt_mode3(const unsigned int len, const unsigned char *buf)
                  */
                 case 0x03:
                 {
-                    CHECKLEN(4);
-                    switch(buf[0x03])
+                    CHECKLEN(4 + doff);
+                    switch(buf[0x03 + doff])
                     {
                         case 0x00:
                         {
@@ -780,10 +802,10 @@ void iap_handlepkt_mode3(const unsigned int len, const unsigned char *buf)
 
                 case 0x04:
                 {
-                    CHECKLEN(5);
-                    if (buf[0x03]==0x00){
+                    CHECKLEN(5 + doff);
+                    if (buf[0x03 + doff]==0x00){
                         /* Not Muted */
-                        global_status.volume = (int) (buf[0x04]/2.65625)-90;
+                        global_status.volume = (int) (buf[0x04 + doff]/2.65625)-90;
                         device.mute = false;
                     }
                     else {
@@ -800,8 +822,8 @@ void iap_handlepkt_mode3(const unsigned int len, const unsigned char *buf)
                 {
                     uint32_t index;
 
-                    CHECKLEN(8);
-                    index = get_u32(&buf[0x03]);
+                    CHECKLEN(8 + doff);
+                    index = get_u32(&buf[0x03 + doff]);
                     if (index == 0) {
                         cmd_ok(cmd);
                     } else {
@@ -815,9 +837,9 @@ void iap_handlepkt_mode3(const unsigned int len, const unsigned char *buf)
                  */
                 case 0x07:
                 {
-                    CHECKLEN(5);
+                    CHECKLEN(5 + doff);
 
-                    switch(buf[0x03])
+                    switch(buf[0x03 + doff])
                     {
                         case 0x00:
                         {
@@ -847,9 +869,9 @@ void iap_handlepkt_mode3(const unsigned int len, const unsigned char *buf)
                  */
                 case 0x08:
                 {
-                    CHECKLEN(5);
+                    CHECKLEN(5 + doff);
 
-                    switch(buf[0x03])
+                    switch(buf[0x03 + doff])
                     {
                         case 0x00:
                         {
@@ -883,7 +905,7 @@ void iap_handlepkt_mode3(const unsigned int len, const unsigned char *buf)
                  */
                 case 0x09:
                 {
-                    CHECKLEN(9);
+                    CHECKLEN(9 + doff);
 
                     cmd_ack(cmd, IAP_ACK_CMD_FAILED);
                     break;
@@ -894,7 +916,7 @@ void iap_handlepkt_mode3(const unsigned int len, const unsigned char *buf)
                  */
                 case 0x0A:
                 {
-                    CHECKLEN(7);
+                    CHECKLEN(7 + doff);
 
                     cmd_ack(cmd, IAP_ACK_CMD_FAILED);
                     break;
@@ -905,7 +927,7 @@ void iap_handlepkt_mode3(const unsigned int len, const unsigned char *buf)
                  */
                 case 0x0B:
                 {
-                    CHECKLEN(5);
+                    CHECKLEN(5 + doff);
 
                     cmd_ack(cmd, IAP_ACK_CMD_FAILED);
                     break;
@@ -916,7 +938,7 @@ void iap_handlepkt_mode3(const unsigned int len, const unsigned char *buf)
                  */
                 case 0x0D:
                 {
-                    CHECKLEN(5);
+                    CHECKLEN(5 + doff);
 
                     cmd_ack(cmd, IAP_ACK_CMD_FAILED);
                     break;
@@ -927,7 +949,7 @@ void iap_handlepkt_mode3(const unsigned int len, const unsigned char *buf)
                  */
                 case 0x0E:
                 {
-                    CHECKLEN(4);
+                    CHECKLEN(4 + doff);
 
                     cmd_ack(cmd, IAP_ACK_CMD_FAILED);
                     break;
@@ -940,8 +962,8 @@ void iap_handlepkt_mode3(const unsigned int len, const unsigned char *buf)
                 {
                     uint16_t pos;
 
-                    CHECKLEN(5);
-                    pos = get_u16(&buf[0x03]);
+                    CHECKLEN(5 + doff);
+                    pos = get_u16(&buf[0x03 + doff]);
                     audio_ff_rewind(1000L * pos);
 
                     cmd_ok(cmd);
@@ -954,10 +976,10 @@ void iap_handlepkt_mode3(const unsigned int len, const unsigned char *buf)
                  */
                 case 0x10:
                 {
-                    CHECKLEN(7);
-                    if (buf[0x03]==0x00){
+                    CHECKLEN(7 + doff);
+                    if (buf[0x03 + doff]==0x00){
                         /* Not Muted */
-                        global_status.volume = (int) (buf[0x04]/2.65625)-90;
+                        global_status.volume = (int) (buf[0x04 + doff]/2.65625)-90;
                         device.mute = false;
                     }
                     else {
@@ -1008,6 +1030,7 @@ void iap_handlepkt_mode3(const unsigned int len, const unsigned char *buf)
             CHECKAUTH;
 
             IAP_TX_INIT(0x03, 0x10);
+            L3_TX_TRANSID();
 
             play_status = audio_status();
 
@@ -1065,9 +1088,9 @@ void iap_handlepkt_mode3(const unsigned int len, const unsigned char *buf)
             uint32_t trackcount;
 
             CHECKAUTH;
-            CHECKLEN(6);
+            CHECKLEN(6 + doff);
 
-            index = get_u32(&buf[0x02]);
+            index = get_u32(&buf[0x02 + doff]);
             trackcount = playlist_amount();
 
             if (index >= trackcount)
@@ -1118,18 +1141,19 @@ void iap_handlepkt_mode3(const unsigned int len, const unsigned char *buf)
             struct playlist_track_info track;
             struct mp3entry id3;
 
-            CHECKLEN(0x09);
+            CHECKLEN(0x09 + doff);
             CHECKAUTH;
 
-            track_index = get_u32(&buf[0x03]);
+            track_index = get_u32(&buf[0x03 + doff]);
             if (-1 == playlist_get_track_info(NULL, track_index, &track)) {
                 cmd_ack(cmd, IAP_ACK_BAD_PARAM);
                 break;
             }
 
             IAP_TX_INIT(0x03, 0x13);
-            IAP_TX_PUT(buf[2]);
-            switch (buf[2])
+            L3_TX_TRANSID();
+            IAP_TX_PUT(buf[2 + doff]);
+            switch (buf[2 + doff])
             {
                 /* 0x00: Track caps/info
                  * Information length: 10 bytes
@@ -1296,6 +1320,7 @@ void iap_handlepkt_mode3(const unsigned int len, const unsigned char *buf)
             CHECKAUTH;
 
             IAP_TX_INIT(0x03, 0x15);
+            L3_TX_TRANSID();
             IAP_TX_PUT_U32(playlist_amount());
 
             iap_send_tx();
@@ -1332,6 +1357,7 @@ void iap_handlepkt_mode3(const unsigned int len, const unsigned char *buf)
              * TODO: Fix to return actual artwork formats
              */
             IAP_TX_INIT(0x03, 0x17);
+            L3_TX_TRANSID();
 
             iap_send_tx();
             break;
@@ -1378,7 +1404,7 @@ void iap_handlepkt_mode3(const unsigned int len, const unsigned char *buf)
         case 0x18:
         {
             CHECKAUTH;
-            CHECKLEN(0x0C);
+            CHECKLEN(0x0C + doff);
 
             /* No artwork support currently */
             cmd_ack(cmd, IAP_ACK_BAD_PARAM);
@@ -1412,6 +1438,7 @@ void iap_handlepkt_mode3(const unsigned int len, const unsigned char *buf)
         case 0x1A:
         {
             IAP_TX_INIT(0x03, 0x1B);
+            L3_TX_TRANSID();
 
             iap_fill_power_state();
             iap_send_tx();
@@ -1446,6 +1473,7 @@ void iap_handlepkt_mode3(const unsigned int len, const unsigned char *buf)
             CHECKAUTH;
 
             IAP_TX_INIT(0x03, 0x1D);
+            L3_TX_TRANSID();
             IAP_TX_PUT(0x00);       /* Always off */
 
             iap_send_tx();
@@ -1478,7 +1506,7 @@ void iap_handlepkt_mode3(const unsigned int len, const unsigned char *buf)
         case 0x1E:
         {
             CHECKAUTH;
-            CHECKLEN(4);
+            CHECKLEN(4 + doff);
 
             /* Sound check is not supported right now
              * TODO: Fix
@@ -1518,12 +1546,12 @@ void iap_handlepkt_mode3(const unsigned int len, const unsigned char *buf)
             uint32_t trackcount;
 
             CHECKAUTH;
-            CHECKLEN(0x0C);
+            CHECKLEN(0x0C + doff);
 
             /* Artwork is currently unsuported, just check for a valid
              * track index
              */
-            index = get_u32(&buf[0x02]);
+            index = get_u32(&buf[0x02 + doff]);
             trackcount = playlist_amount();
 
             if (index >= trackcount)
@@ -1534,6 +1562,7 @@ void iap_handlepkt_mode3(const unsigned int len, const unsigned char *buf)
 
             /* Send an empty list */
             IAP_TX_INIT(0x03, 0x20);
+            L3_TX_TRANSID();
 
             iap_send_tx();
             break;
