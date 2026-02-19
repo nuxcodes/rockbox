@@ -1170,7 +1170,8 @@ void iap_handlepkt_mode0(const unsigned int len, const unsigned char *buf)
          * 0x01: Command, always 0x39
          * 0x02-0x03: Transaction ID
          * 0x04: Number of FID token values
-         * 0x05+: FID token data (type, subtype, length, value)
+         * 0x05+: FID token data: [length(1)][type(1)][subtype(1)][data(length-2)]
+         *        length includes type+subtype but not itself
          */
         case 0x39:
         {
@@ -1190,18 +1191,18 @@ void iap_handlepkt_mode0(const unsigned int len, const unsigned char *buf)
             IAP_TX_PUT(tid_lo);
             IAP_TX_PUT(num_tokens);
 
-            for (i = 0; i < num_tokens && offset + 2 < (int)len; i++)
+            for (i = 0; i < num_tokens && offset + 3 <= (int)len; i++)
             {
-                uint8_t fid_type = buf[offset];
-                uint8_t fid_subtype = buf[offset + 1];
-                uint8_t fid_len = (offset + 2 < (int)len) ? buf[offset + 2] : 0;
+                uint8_t fid_len = buf[offset];         /* token payload length */
+                uint8_t fid_type = buf[offset + 1];
+                uint8_t fid_subtype = buf[offset + 2];
 
                 IAP_TX_PUT(fid_type);
                 IAP_TX_PUT(fid_subtype);
                 IAP_TX_PUT(0x00); /* status: accepted */
 
-                /* skip: type(1) + subtype(1) + length(1) + data(fid_len) */
-                offset += 3 + fid_len;
+                /* skip: length_byte(1) + payload(fid_len) */
+                offset += 1 + fid_len;
             }
 
             iap_send_tx();
@@ -1237,15 +1238,15 @@ void iap_handlepkt_mode0(const unsigned int len, const unsigned char *buf)
                 IAP_TX_PUT(0x00); /* IDPSStatusOK */
                 iap_send_tx();
 
-                /* Set up device and start auth */
+                /* Set up device and start auth.
+                 * Periodic handler will send GetDevAuthenticationInfo (0x14)
+                 * when it sees AUST_INIT, matching the IdentifyDeviceLingoes
+                 * (0x13) flow.
+                 */
                 iap_reset_device(&device);
-                device.lingoes = 1;
+                device.lingoes = BIT_N(0x00) | BIT_N(0x03) | BIT_N(0x0A);
                 device.do_power_notify = true;
                 device.auth.state = AUST_INIT;
-
-                /* GetAccessoryAuthenticationInfo (0x14) */
-                IAP_TX_INIT(0x00, 0x14);
-                iap_send_tx();
             }
             else if (idps_status == 0x01) /* Reset */
             {
