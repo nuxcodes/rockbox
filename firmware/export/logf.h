@@ -29,7 +29,7 @@
 
 #ifndef __PCTOOL__
 
-#define MAX_LOGF_SIZE 16384
+#define MAX_LOGF_SIZE (256 * 1024)
 
 extern unsigned char logfbuffer[MAX_LOGF_SIZE + 1];
 extern int logfindex;
