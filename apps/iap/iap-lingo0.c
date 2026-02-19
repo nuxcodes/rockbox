@@ -1266,6 +1266,68 @@ void iap_handlepkt_mode0(const unsigned int len, const unsigned char *buf)
             break;
         }
 
+        /* RequestTransportMaxPayloadSize (0x11)
+         *
+         * Accessory requests the maximum allowable payload size per
+         * packet using the current iAP transport.
+         *
+         * Packet format (offset in buf[]: Description)
+         * 0x00: Lingo ID: General Lingo, always 0x00
+         * 0x01: Command, always 0x11
+         * 0x02-0x03: Transaction ID
+         *
+         * Returns:
+         * ReturnTransportMaxPayloadSize (0x12)
+         */
+        case 0x11:
+        {
+            CHECKLEN(4);
+            uint8_t tid_hi = buf[2];
+            uint8_t tid_lo = buf[3];
+
+            IAP_TX_INIT(0x00, 0x12);
+            IAP_TX_PUT(tid_hi);
+            IAP_TX_PUT(tid_lo);
+            /* Max payload size as big-endian uint16.
+             * MFi spec default is 706 bytes if iPod returns Bad Param.
+             * Report 0x00FF (255) for USB HID full-speed transport.
+             */
+            IAP_TX_PUT(0x00);
+            IAP_TX_PUT(0xFF);
+            iap_send_tx();
+            break;
+        }
+
+        /* GetiPodOptionsForLingo (0x4B)
+         *
+         * Accessory queries per-lingo option bits for a given lingo.
+         *
+         * Packet format (offset in buf[]: Description)
+         * 0x00: Lingo ID: General Lingo, always 0x00
+         * 0x01: Command, always 0x4B
+         * 0x02-0x03: Transaction ID
+         * 0x04: Lingo to query options for
+         *
+         * Returns:
+         * RetiPodOptionsForLingo (0x4C)
+         */
+        case 0x4B:
+        {
+            CHECKLEN(5);
+            uint8_t tid_hi = buf[2];
+            uint8_t tid_lo = buf[3];
+            uint8_t lingo = buf[4];
+
+            IAP_TX_INIT(0x00, 0x4C);
+            IAP_TX_PUT(tid_hi);
+            IAP_TX_PUT(tid_lo);
+            IAP_TX_PUT(lingo);
+            IAP_TX_PUT_U32(0x00);
+            IAP_TX_PUT_U32(0x00);
+            iap_send_tx();
+            break;
+        }
+
         /* The default response is IAP_ACK_BAD_PARAM */
         default:
         {
