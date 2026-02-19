@@ -1630,7 +1630,7 @@ bool usb_audio_fast_transfer_complete(int ep, int dir, int status, int length)
     (void) dir;
     bool retval = false;
 
-    if(ep == EP_ISO_OUT && usb_as_playback_intf_alt == 1)
+    if(ep == EP_NUM(EP_ISO_OUT) && usb_as_playback_intf_alt == 1)
     {
         // check for dropped frames
         if (last_frame != usb_drv_get_frame_number())
@@ -1705,7 +1705,7 @@ bool usb_audio_fast_transfer_complete(int ep, int dir, int status, int length)
     }
 
     /* Source mode: handle ISO IN completion for audio data */
-    if(ep == EP_ISO_SOURCE_IN && source_streaming)
+    if(ep == EP_NUM(EP_ISO_SOURCE_IN) && source_streaming)
     {
         int frame_bytes = source_frame_bytes();
 

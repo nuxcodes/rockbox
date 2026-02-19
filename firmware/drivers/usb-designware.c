@@ -1247,10 +1247,23 @@ static void usb_dw_irq(void)
 #endif /* USB_DW_ARCH_SLAVE */
 #endif /* USB_DW_SHARED_FIFO */
 
-    /* Incomplete isochronous IN transfer */
+    /* Incomplete isochronous IN transfer — re-arm for the next frame.
+     * The DMA address and transfer size are still valid from the original
+     * programming; we just need to update the frame parity and re-enable. */
     if (DWC_GINTSTS & IISOIXFR)
     {
-        logf("IISOIXFR! DSTS=%08lx", (unsigned long)DWC_DSTS);
+        for (ep = 1; ep < USB_NUM_ENDPOINTS; ep++)
+        {
+            uint32_t epctl = DWC_DIEPCTL(ep);
+            if ((epctl & EPENA) &&
+                (((epctl >> 18) & 0x3) == EPTYP_ISOCHRONOUS))
+            {
+                if ((DWC_DSTS >> 8) & 1)
+                    DWC_DIEPCTL(ep) |= EPENA | CNAK | SETD0PIDEF;
+                else
+                    DWC_DIEPCTL(ep) |= EPENA | CNAK | SETD1PIDOF;
+            }
+        }
         DWC_GINTSTS = IISOIXFR;
     }
 
