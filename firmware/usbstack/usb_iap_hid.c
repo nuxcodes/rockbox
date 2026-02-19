@@ -36,7 +36,7 @@
 #include "usb_ch9.h"
 #include "iap.h"
 
-#define LOGF_ENABLE
+/* #define LOGF_ENABLE */
 #include "logf.h"
 
 /* HID class-specific descriptor types */

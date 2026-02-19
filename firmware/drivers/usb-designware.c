@@ -820,7 +820,23 @@ static void usb_dw_epstart(int epnum, enum usb_dw_epdir epdir,
     DWC_EPDMA(epnum, epdir) = USB_DW_PHYSADDR((uint32_t)buf);
 #endif
     DWC_EPTSIZ(epnum, epdir) = eptsiz;
-    DWC_EPCTL(epnum, epdir) |= EPENA | nak;
+
+    /* For isochronous endpoints, set the even/odd frame bit to schedule
+     * the transfer for the next frame.  The DWC OTG controller requires
+     * this — without it, the transfer never completes (no XFRC). */
+    if (((DWC_EPCTL(epnum, epdir) >> 18) & 3) == EPTYP_ISOCHRONOUS)
+    {
+        /* DSTS SOFFN bit 0 gives current frame parity.
+         * Schedule for the opposite parity (= next frame). */
+        if ((DWC_DSTS >> 8) & 1)
+            DWC_EPCTL(epnum, epdir) |= EPENA | nak | SETD0PIDEF; /* even */
+        else
+            DWC_EPCTL(epnum, epdir) |= EPENA | nak | SETD1PIDOF; /* odd */
+    }
+    else
+    {
+        DWC_EPCTL(epnum, epdir) |= EPENA | nak;
+    }
 
 #ifdef USB_DW_ARCH_SLAVE
     /* Enable interrupts to start pushing data into the FIFO */
