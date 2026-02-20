@@ -1739,6 +1739,19 @@ bool usb_audio_fast_transfer_complete(int ep, int dir, int status, int length)
         else
             available = TX_RING_SIZE - read + write;
 
+        /* Adaptive rate: adjust ±1 sample to track ring buffer fill level.
+         * Prevents overflow/underflow from I2S vs USB clock drift
+         * (e.g. 44117.6 Hz actual vs 44100 Hz nominal at 44.1kHz). */
+        {
+            int target = TX_RING_SIZE / 2;
+            if (available > target + TX_RING_SIZE / 8)
+                frame_bytes += 4;  /* buffer filling up -- drain 1 extra sample */
+            else if (available < target - TX_RING_SIZE / 8 && frame_bytes > 4)
+                frame_bytes -= 4;  /* buffer draining -- send 1 fewer sample */
+            if (frame_bytes > TX_FRAME_SIZE)
+                frame_bytes = TX_FRAME_SIZE;
+        }
+
         /* pre-buffering: wait until ring buffer has enough cushion
          * before sending real data, to avoid underflow clicks */
         if (source_prebuffering && available >= TX_RING_SIZE / 4)

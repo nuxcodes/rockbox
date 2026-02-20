@@ -654,6 +654,15 @@ static int ata_power_up(void)
     logf("ata POWERUP %ld", current_tick);
 
     ata_set_active();
+
+    if (ata_ssd_mode && !ceata) {
+        /* SSD: clock was gated but controller state preserved.
+         * Just ungate -- no reset or re-identify needed. */
+        PWRCON(0) &= ~(1 << 5);
+        ata_powered = true;
+        return 0;
+    }
+
     ide_power_enable(true);
     long spinup_start = current_tick;
     if (ceata) {
@@ -920,10 +929,13 @@ static int ata_transfer_sectors(uint64_t sector, int count, void* buffer, int wr
     if (sector + count > total_sectors)
         RET_ERR(0);
     ata_set_active();
-    if (ata_dma && write)
-        commit_dcache();
-    else if (ata_dma)
-        commit_discard_dcache();
+    if (ata_dma) {
+        int xfer_size = count * log_sector_size;
+        if (write)
+            commit_dcache_range(buffer, xfer_size);
+        else
+            commit_discard_dcache_range(buffer, xfer_size);
+    }
     if (!ceata)
         ATA_COMMAND = BIT(1);
 
@@ -1119,12 +1131,13 @@ void ata_sleepnow(void)
         PWRCON(0) |= (1 << 9);
         ata_power_down();
     } else if (ata_ssd_mode) {
-        /* SSD: flush only (already done above), skip sleep.
-         * Flash draws negligible idle current -- no platters to
-         * stop.  Keep the ATA controller clocked so storage access
-         * is always instant.  Reset the activity timer to defer
-         * the next idle cycle. */
-        ata_set_active();
+        /* SSD: gate ATA controller clock.  Flash stays powered,
+         * GPIOs stay configured, controller state preserved through
+         * clock gate.  Near-instant wake via fast-path in
+         * ata_power_up(). */
+        logf("ata SSD SLEEP %ld", current_tick);
+        PWRCON(0) |= (1 << 5);
+        ata_powered = false;
     } else if (ata_disk_can_sleep()) {
         logf("ata SLEEP %ld", current_tick);
         ata_wait_for_rdy(1000000);
