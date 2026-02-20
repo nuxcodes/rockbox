@@ -40,7 +40,7 @@
 #include "settings.h"
 #include "audio.h"
 #include "voice_thread.h"
-#ifdef HAVE_CS42L55
+#if defined(HAVE_CS42L55) && !defined(SIMULATOR)
 #include "audiohw.h"
 #endif
 
@@ -838,13 +838,14 @@ void pcmbuf_play_start(void)
     if (mixer_channel_status(PCM_MIXER_CHAN_PLAYBACK) == CHANNEL_STOPPED &&
         chunk_widx != chunk_ridx)
     {
-#ifdef HAVE_CS42L55
-        /* Power up codec DAC before starting I2S/DMA */
-        audiohw_idle_powerup();
-#endif
         current_desc = NULL;
         mixer_channel_play_data(PCM_MIXER_CHAN_PLAYBACK, pcmbuf_pcm_callback,
                                 NULL, 0);
+#if defined(HAVE_CS42L55) && !defined(SIMULATOR)
+        /* Power up codec DAC after I2S/MCLK is running —
+         * CS42L55 needs MCLK to properly exit PDN_CODEC */
+        audiohw_idle_powerup();
+#endif
     }
 }
 
@@ -856,7 +857,7 @@ void pcmbuf_play_stop(void)
     /* Reset channel */
     mixer_channel_stop(PCM_MIXER_CHAN_PLAYBACK);
 
-#ifdef HAVE_CS42L55
+#if defined(HAVE_CS42L55) && !defined(SIMULATOR)
     /* Power down codec DAC after I2S/DMA has stopped */
     audiohw_idle_powerdown();
 #endif

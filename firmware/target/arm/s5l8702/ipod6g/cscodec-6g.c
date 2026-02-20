@@ -26,6 +26,7 @@
 #include "i2c-s5l8702.h"
 #include "s5l87xx.h"
 #include "cscodec.h"
+#include "pmu-target.h"
 
 void audiohw_init(void)
 {
@@ -48,7 +49,8 @@ void cscodec_write(int reg, unsigned char data)
 
 void cscodec_power(bool state)
 {
-    (void)state; //TODO: Figure out which LDO this is
+    if (state) pmu_ldo_power_on(3);
+    else pmu_ldo_power_off(3);
 }
 
 void cscodec_reset(bool state)

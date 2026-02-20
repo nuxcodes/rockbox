@@ -563,9 +563,14 @@ static bool usbaudio_active = false;
 /* ===== Source mode (iPod -> USB host) TX ring buffer ===== */
 /* Max bytes per USB frame: 48000Hz * 2ch * 2bytes / 1000 = 192 bytes */
 #define TX_FRAME_SIZE 192
-/* Ring buffer size: ~500ms at 48kHz — large enough to absorb codec
- * decode bursts and clock drift between internal DAC and USB host. */
-#define TX_RING_SIZE (TX_FRAME_SIZE * 512)
+/* Ring buffer size: ~8.7s at 48kHz — large enough to absorb codec
+ * decode bursts and I2S vs USB clock drift (44117 vs 44100 Hz).
+ * At 70.6 bytes/sec drift, takes ~6.2 hours continuous play to reach
+ * the 75% write-throttle threshold from midpoint. */
+#define TX_RING_SIZE (TX_FRAME_SIZE * 16384)
+/* Pre-buffering threshold: fixed ~24KB (~140ms at 44.1kHz).
+ * Must not scale with ring buffer size or startup delay grows. */
+#define SOURCE_PREBUF_BYTES (TX_FRAME_SIZE * 128)
 static unsigned char *tx_ring_buf;
 static int tx_ring_buf_handle;
 static volatile int tx_write_pos; /* byte offset, updated by buffer hook */
@@ -941,14 +946,15 @@ static void usb_audio_stop_playback(void)
 /*
  * Compute number of bytes to send in this USB frame.
  * Handles non-integer sample rates (e.g. 44100 Hz / 1000 = 44.1 samples/frame)
- * using a fractional accumulator. This matches ipod-gadget's approach:
- * at 44.1kHz, sends 9 frames of 44 samples + 1 frame of 45 samples = 44100/sec.
+ * using a fractional accumulator. Uses the nominal frequency (what the DAC
+ * expects via USB descriptor). The write-side throttle in source_buffer_hook()
+ * handles the I2S vs USB clock drift.
  */
 static int source_frame_bytes(void)
 {
     unsigned long freq = hw_freq_sampr[as_source_freq_idx];
     int base_samples = freq / 1000;
-    int remainder = freq % 1000; /* fractional part per frame (e.g. 100 for 44100) */
+    int remainder = freq % 1000;
     int samples;
 
     source_frac_num += remainder;
@@ -995,6 +1001,19 @@ static void source_buffer_hook(const void *start, size_t size)
 
     int to_copy = MIN((int)size, space);
     to_copy &= ~3; /* round down to sample frame boundary (4 bytes) */
+
+    /* Write-side drift safety: when ring buffer is >75% full,
+     * skip 1 stereo sample from input to prevent overflow.
+     * Keeps USB packet sizes constant for MFi DAC compatibility.
+     * With actual I2S rate, this only fires after hours of
+     * continuous play under worst-case crystal mismatch. */
+    if (to_copy > 4)
+    {
+        int used = TX_RING_SIZE - 1 - space;
+        if (used > TX_RING_SIZE * 3 / 4)
+            to_copy -= 4;
+    }
+
     if (to_copy <= 0)
         return;
 
@@ -1739,22 +1758,9 @@ bool usb_audio_fast_transfer_complete(int ep, int dir, int status, int length)
         else
             available = TX_RING_SIZE - read + write;
 
-        /* Adaptive rate: adjust ±1 sample to track ring buffer fill level.
-         * Prevents overflow/underflow from I2S vs USB clock drift
-         * (e.g. 44117.6 Hz actual vs 44100 Hz nominal at 44.1kHz). */
-        {
-            int target = TX_RING_SIZE / 2;
-            if (available > target + TX_RING_SIZE / 8)
-                frame_bytes += 4;  /* buffer filling up -- drain 1 extra sample */
-            else if (available < target - TX_RING_SIZE / 8 && frame_bytes > 4)
-                frame_bytes -= 4;  /* buffer draining -- send 1 fewer sample */
-            if (frame_bytes > TX_FRAME_SIZE)
-                frame_bytes = TX_FRAME_SIZE;
-        }
-
         /* pre-buffering: wait until ring buffer has enough cushion
          * before sending real data, to avoid underflow clicks */
-        if (source_prebuffering && available >= TX_RING_SIZE / 4)
+        if (source_prebuffering && available >= SOURCE_PREBUF_BYTES)
         {
             source_prebuffering = false;
             source_fade_pos = 0; /* start fade-in from silence to audio */
