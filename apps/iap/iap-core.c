@@ -361,6 +361,23 @@ static int iap_task(struct timeout *tmo)
     (void) tmo;
 
     queue_post(&iap_queue, IAP_EV_TICK, 0);
+
+    /* After auth completes and no active work remains, reduce tick
+     * rate from 10 Hz to 1 Hz to save power during idle MFi DAC
+     * connections.  100ms is still needed during auth handshake,
+     * accessory info polling, button repeat, notification delivery,
+     * and shutdown notification.  Incoming iAP messages use
+     * IAP_EV_MSG_RCVD and are processed independently of the tick. */
+    if (device.auth.state == AUST_AUTH
+        && device.accinfo != ACCST_INIT
+        && device.accinfo != ACCST_SENT
+        && device.accinfo != ACCST_DATA
+        && !device.audio_init_pending
+        && !device.do_notify
+        && !iap_shutdown
+        && iap_timeoutbtn == 0)
+        return MS_TO_TICKS(1000);
+
     return MS_TO_TICKS(100);
 }
 

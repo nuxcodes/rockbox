@@ -119,9 +119,25 @@ void usb_charging_maxcurrent_change(int maxcurrent)
 
 unsigned int power_input_status(void)
 {
+    /* Latch: once the LTC4066 !CHRG pin confirms charging on this
+     * USB session, keep reporting POWER_INPUT_USB_CHARGER until
+     * USB disconnects.  This avoids oscillation when the battery
+     * is full (!CHRG deasserts) and distinguishes non-charging
+     * USB accessories (MFi DACs) from wall chargers. */
+    static bool usb_charger_seen;
     unsigned int status = POWER_INPUT_NONE;
     if (usb_detect() == USB_INSERTED)
-        status |= POWER_INPUT_USB_CHARGER;
+    {
+        status |= POWER_INPUT_USB;
+        if (charging_state())
+            usb_charger_seen = true;
+        if (usb_charger_seen)
+            status |= POWER_INPUT_USB_CHARGER;
+    }
+    else
+    {
+        usb_charger_seen = false;
+    }
     if (pmu_firewire_present())
         status |= POWER_INPUT_MAIN_CHARGER;
     return status;

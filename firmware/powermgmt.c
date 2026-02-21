@@ -1242,7 +1242,7 @@ void handle_auto_poweroff(void)
 #if CONFIG_TUNER
         !(get_radio_status() & FMRADIO_PLAYING) &&
 #endif
-        !usb_inserted() &&
+        (!usb_inserted() || !charger_inserted()) &&
         (audio_stat == 0 ||
          audio_stat == (AUDIO_STATUS_PLAY | AUDIO_STATUS_PAUSE)))
     {
