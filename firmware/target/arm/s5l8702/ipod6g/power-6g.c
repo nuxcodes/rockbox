@@ -26,6 +26,7 @@
 #include "panic.h"
 #include "pmu-target.h"
 #include "usb_core.h"   /* for usb_charging_maxcurrent_change */
+#include "backlight.h"
 
 static int idepowered;
 
@@ -114,29 +115,54 @@ void usb_charging_maxcurrent_change(int maxcurrent)
     /* This GPIO is connected to the LTC4066's HPWR pin */
     /* Setting it low limits current to 100mA, setting it high allows 500mA */
     GPIOCMD = 0xb060e | (fast_charging ? 1 : 0);
+
+    /* GPIO C1: disable battery charging when USB current commitment
+     * is insufficient (< 500mA).  This prevents charge oscillation
+     * when connected to MFi DACs without power bank, where the
+     * source can't deliver enough for device + charge current.
+     * Device still draws operating power from USB; battery only
+     * supplements if USB is insufficient. */
+    GPIOCMD = 0xc010e | (fast_charging ? 0 : 1);
 }
 #endif
 
 unsigned int power_input_status(void)
 {
-    /* Latch: once the LTC4066 !CHRG pin confirms charging on this
-     * USB session, keep reporting POWER_INPUT_USB_CHARGER until
-     * USB disconnects.  This avoids oscillation when the battery
-     * is full (!CHRG deasserts) and distinguishes non-charging
-     * USB accessories (MFi DACs) from wall chargers. */
-    static bool usb_charger_seen;
+    static bool usb_charger_detected;
+    static bool prev_bl_on;
     unsigned int status = POWER_INPUT_NONE;
     if (usb_detect() == USB_INSERTED)
     {
         status |= POWER_INPUT_USB;
-        if (charging_state())
-            usb_charger_seen = true;
-        if (usb_charger_seen)
+        bool bl_on = is_backlight_on(true);
+        if (bl_on)
+        {
+            /* Backlight on: enable C1 so charging_state() reflects
+             * the real hardware state. */
+            GPIOCMD = 0xc010e | 0;  /* C1 LOW: allow charge */
+            /* Skip sample on the first poll after BL off->on to let
+             * the LTC4066 settle after C1 transition.  Without this,
+             * a stale/transient !CHRG reading causes a brief false
+             * charging indication. */
+            if (prev_bl_on)
+                usb_charger_detected = charging_state();
+        }
+        else if (!usb_charger_detected)
+        {
+            /* Backlight off + no charger detected: set C1 HIGH to
+             * prevent trickle charge from weak USB sources. */
+            GPIOCMD = 0xc010e | 1;  /* C1 HIGH: block charge */
+        }
+        /* Backlight off + charger detected: C1 stays LOW so
+         * charging continues from the real charger source. */
+        if (usb_charger_detected)
             status |= POWER_INPUT_USB_CHARGER;
+        prev_bl_on = bl_on;
     }
     else
     {
-        usb_charger_seen = false;
+        usb_charger_detected = false;
+        prev_bl_on = false;
     }
     if (pmu_firewire_present())
         status |= POWER_INPUT_MAIN_CHARGER;

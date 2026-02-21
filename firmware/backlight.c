@@ -39,6 +39,7 @@
 #include "timer.h"
 #include "backlight.h"
 #include "lcd.h"
+#include "storage.h"
 #include "screendump.h"
 
 #ifdef HAVE_REMOTE_LCD
@@ -492,6 +493,10 @@ static inline void do_backlight_off(void)
     backlight_lcd_sleep_countdown(true);
 #endif
 #endif
+    /* Accelerate SSD sleep when backlight turns off — the deep sleep
+     * timer in the storage driver uses backlight state as a gate. */
+    if (storage_get_ssd_mode())
+        storage_sleep();
 }
 
 /* Update state of backlight according to timeout setting */
@@ -528,6 +533,10 @@ static void backlight_update_state(void)
 #else
         backlight_hw_on();
 #endif
+        /* Pre-wake SSD from deep sleep so disk access is ready
+         * by the time the user navigates the UI. */
+        if (storage_get_ssd_mode())
+            storage_spin();
     }
 }
 
@@ -861,7 +870,7 @@ int backlight_get_current_timeout(void)
         /* always on or always off */
     else
 #if CONFIG_CHARGING
-        if (power_input_present())
+        if (charger_inserted())
             return backlight_timeout_plugged;
         else
 #endif

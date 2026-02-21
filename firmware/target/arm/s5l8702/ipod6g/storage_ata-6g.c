@@ -34,6 +34,7 @@
 #include "panic.h"
 #include "fs_defines.h"
 #include "logf.h"
+#include "backlight.h"
 
 #ifndef ATA_RETRIES
 #define ATA_RETRIES 3
@@ -72,6 +73,8 @@ static long ata_last_activity_value = -1;
 static long ata_sleep_timeout = 7 * HZ;
 static bool ata_powered;
 static bool ata_ssd_mode = false;
+static long ssd_sleep_tick;
+static bool ssd_deep_asleep;
 static struct semaphore mmc_wakeup;
 static struct semaphore mmc_comp_wakeup;
 #ifdef HAVE_ATA_DMA
@@ -656,11 +659,14 @@ static int ata_power_up(void)
     ata_set_active();
 
     if (ata_ssd_mode && !ceata) {
-        /* SSD: clock was gated but controller state preserved.
-         * Just ungate -- no reset or re-identify needed. */
-        PWRCON(0) &= ~(1 << 5);
-        ata_powered = true;
-        return 0;
+        if (!ssd_deep_asleep) {
+            /* Fast path: clock was gated, AUTOLDO still on */
+            PWRCON(0) &= ~(1 << 5);
+            ata_powered = true;
+            return 0;
+        }
+        ssd_deep_asleep = false;
+        /* Fall through to full PATA init below */
     }
 
     ide_power_enable(true);
@@ -1138,6 +1144,8 @@ void ata_sleepnow(void)
         logf("ata SSD SLEEP %ld", current_tick);
         PWRCON(0) |= (1 << 5);
         ata_powered = false;
+        ssd_deep_asleep = false;
+        ssd_sleep_tick = current_tick;
     } else if (ata_disk_can_sleep()) {
         logf("ata SLEEP %ld", current_tick);
         ata_wait_for_rdy(1000000);
@@ -1159,6 +1167,13 @@ void ata_sleepnow(void)
 
 void ata_spin(void)
 {
+    if (ata_ssd_mode && !ata_powered)
+    {
+        mutex_lock(&ata_mutex);
+        if (!ata_powered)
+            ata_power_up();
+        mutex_unlock(&ata_mutex);
+    }
     ata_set_active();
 }
 
@@ -1191,6 +1206,8 @@ int ata_init(void)
     semaphore_init(&mmc_comp_wakeup, 1, 0);
     ceata = PDAT(11) & BIT(1);
     ata_powered = false;
+    ssd_deep_asleep = false;
+    ssd_sleep_tick = 0;
     total_sectors = 0;
 
     /* get identify_info */
@@ -1329,6 +1346,26 @@ int ata_event(long id, intptr_t data)
         if (!ata_powered ||
             TIME_BEFORE(current_tick, ata_last_activity_value + ata_sleep_timeout))
         {
+            /* Phase 2: SSD deep sleep — cut AUTOLDO after 30s of
+             * clock-gate sleep when backlight is off */
+            if (ata_ssd_mode && !ata_powered && !ssd_deep_asleep
+                && !is_backlight_on(true)
+                && TIME_AFTER(current_tick, ssd_sleep_tick + 10 * HZ))
+            {
+                mutex_lock(&ata_mutex);
+                if (!ata_powered && !ssd_deep_asleep)
+                {
+                    logf("ata SSD DEEP %ld", current_tick);
+                    PCON(7) = 0;
+                    PCON(8) = 0;
+                    PCON(9) = 0;
+                    PCON(10) &= ~0xffff;
+                    PCON(11) &= ~0xf;
+                    ide_power_enable(false);
+                    ssd_deep_asleep = true;
+                }
+                mutex_unlock(&ata_mutex);
+            }
             STG_EVENT_ASSERT_ACTIVE(STORAGE_ATA);
         }
     }

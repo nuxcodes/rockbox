@@ -362,7 +362,7 @@ static int voltage_to_battery_level(int millivolts)
         return -1;
 
 #if CONFIG_CHARGING >= CHARGING_MONITOR
-    if (charging_state()) {
+    if (charge_state > DISCHARGING) {
         /* battery level is defined to be < 100% until charging is finished */
         level = voltage_to_percent(millivolts, percent_to_volt_charge);
         if (level > 99)
@@ -1242,7 +1242,7 @@ void handle_auto_poweroff(void)
 #if CONFIG_TUNER
         !(get_radio_status() & FMRADIO_PLAYING) &&
 #endif
-        (!usb_inserted() || !charger_inserted()) &&
+        !usb_inserted() &&
         (audio_stat == 0 ||
          audio_stat == (AUDIO_STATUS_PLAY | AUDIO_STATUS_PAUSE)))
     {
