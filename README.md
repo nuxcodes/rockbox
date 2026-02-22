@@ -1,5 +1,5 @@
 <p align="center">
-  <!-- TODO: Add Rockpod hero image -->
+  <img src="screenshots/hero-image.jpeg" alt="Rockpod Hero Image" width="600">
   <h1 align="center">Rockpod</h1>
   <p align="center">
     Custom Rockbox firmware for iPod Classic.<br>
@@ -45,6 +45,7 @@ None of this existed in Rockbox before. It required building a new protocol stac
 Any iPod dock connector accessory that uses Digital Audio Lingo (0x0A) should work. The OPPO HA-2SE is the primary tested device. DACs, speakers, docks, and car stereos that accept digital audio from an iPod are all expected to be compatible.
 
 **DACs**
+
 - OPPO HA-2 / HA-2SE
 - Sony PHA-1 / PHA-1A
 - Sony PHA-2 / PHA-2A
@@ -84,6 +85,7 @@ iPod connects via dock USB
 The iAP HID transport handles multi-report fragmentation for large payloads (128-byte RSA signatures span multiple HID reports, reassembled via link control bytes). Transaction IDs are tracked and echoed for all post-IDPS commands.
 
 Key files:
+
 - `firmware/usbstack/usb_audio.c` — source mode streaming engine
 - `firmware/usbstack/usb_iap_hid.c` — iAP-over-USB-HID transport (new)
 - `firmware/usbstack/usb_core.c` — dual USB configuration
@@ -98,15 +100,15 @@ Stock PictureFlow shows 3 slides, uses hardcoded colors, and is buried in the pl
 
 <!-- TODO: Add before/after screenshot — stock PictureFlow vs Rockpod Cover Flow -->
 
-| Cover Flow | Full-screen mode |
-|:---:|:---:|
+|                     Cover Flow                     |                        Full-screen mode                         |
+| :------------------------------------------------: | :-------------------------------------------------------------: |
 | <img src="screenshots/cover-flow.png" width="280"> | <img src="screenshots/cover-flow-no-statusbar.png" width="280"> |
-| Status bar on | Status bar toggled off |
+|                   Status bar on                    |                     Status bar toggled off                      |
 
-| Track list | Display settings |
-|:---:|:---:|
+|                          Track list                          |                      Display settings                       |
+| :----------------------------------------------------------: | :---------------------------------------------------------: |
 | <img src="screenshots/cover-flow-tracklist.png" width="280"> | <img src="screenshots/cover-flow-settings.png" width="280"> |
-| Title only — no track number prefix | Slide tuck, crossfade, speed |
+|             Title only — no track number prefix              |                Slide tuck, crossfade, speed                 |
 
 - **Theme-aware colors** — slide edges and backgrounds fade toward your theme's background color, not hardcoded black
 - **Status bar support** — integrates with the SBS status bar, showing "Cover Flow" in the title bar. Can be toggled off for full-screen mode
@@ -123,10 +125,10 @@ Stock PictureFlow shows 3 slides, uses hardcoded colors, and is buried in the pl
 
 Rockpod works with both stock HDDs and iFlash SSD mods. HDD behavior is unchanged from stock Rockbox. When an SSD is detected, Rockpod switches to a lighter sleep strategy — faster wake times, lower idle power draw, and no unnecessary spin-up delays.
 
-| Storage Mode |
-|:---|
+| Storage Mode                                         |
+| :--------------------------------------------------- |
 | <img src="screenshots/storage-mode.png" width="280"> |
-| Auto-detect, or manually select HDD / SSD |
+| Auto-detect, or manually select HDD / SSD            |
 
 - **Auto-detection** via ATA IDENTIFY heuristics (rotation rate, form factor, TRIM support, CFA compliance)
 - **Two-phase idle sleep** — clock-gate after 7 seconds (near-instant wake), then cut AUTOLDO after 30 seconds with backlight off
@@ -138,15 +140,16 @@ Rockpod works with both stock HDDs and iFlash SSD mods. HDD behavior is unchange
 <details>
 <summary><strong>Under the hood: sleep states</strong></summary>
 
-| State | What happens | Wake time |
-|-------|-------------|-----------|
-| **Active** | Normal operation | — |
-| **Clock-gated** | ATA clock off, flash powered, GPIOs held | <5 ms |
-| **Deep sleep** | AUTOLDO cut, GPIOs tri-stated, controller off | ~330 ms |
+| State           | What happens                                  | Wake time |
+| --------------- | --------------------------------------------- | --------- |
+| **Active**      | Normal operation                              | —         |
+| **Clock-gated** | ATA clock off, flash powered, GPIOs held      | <5 ms     |
+| **Deep sleep**  | AUTOLDO cut, GPIOs tri-stated, controller off | ~330 ms   |
 
 Stock HDD behavior: full power-down + re-init at ~530 ms.
 
 Key file: `firmware/target/arm/s5l8702/ipod6g/storage_ata-6g.c`
+
 </details>
 
 ---
@@ -163,15 +166,16 @@ Key file: `firmware/target/arm/s5l8702/ipod6g/storage_ata-6g.c`
 <details>
 <summary><strong>Under the hood: LTC4066 charge control</strong></summary>
 
-| GPIO | Function | Rockpod behavior |
-|------|----------|-----------------|
-| B6 (HPWR) | USB current limit | LOW = 100 mA, HIGH = 500 mA |
-| B7 (SUSP) | USB suspend | Prevents any USB power draw |
-| C1 | Charge disable | HIGH blocks charging from weak sources |
+| GPIO      | Function          | Rockpod behavior                       |
+| --------- | ----------------- | -------------------------------------- |
+| B6 (HPWR) | USB current limit | LOW = 100 mA, HIGH = 500 mA            |
+| B7 (SUSP) | USB suspend       | Prevents any USB power draw            |
+| C1        | Charge disable    | HIGH blocks charging from weak sources |
 
 When connected to an MFi accessory without a power bank, C1 goes HIGH during backlight-off to block trickle drain. On backlight-on, C1 goes LOW to sample `!CHRG` — if charging is detected, it stays LOW.
 
 Key files: `firmware/target/arm/s5l8702/ipod6g/power-6g.c`, `powermgmt-6g.c`
+
 </details>
 
 ---
@@ -180,10 +184,10 @@ Key files: `firmware/target/arm/s5l8702/ipod6g/power-6g.c`, `powermgmt-6g.c`
 
 The main menu is reduced to five entries:
 
-| Main menu | Database track list |
-|:---:|:---:|
+|                     Main menu                     |                    Database track list                     |
+| :-----------------------------------------------: | :--------------------------------------------------------: |
 | <img src="screenshots/main-menu.png" width="280"> | <img src="screenshots/database-tracklist.png" width="280"> |
-| 5 menu items | Title only — no disc/track number clutter |
+|                   5 menu items                    |         Title only — no disc/track number clutter          |
 
 Removed: File Browser, Recording, FM Radio, Bookmarks, Plugins, Playlists, Shortcuts. If you need any of these back, edit `root_menu.c`.
 
@@ -204,15 +208,15 @@ The repo includes a modified version of **adwaitapod_dark_simplified** with swap
 
 ## At a Glance
 
-| | Stock Rockbox | Rockpod |
-|---|---|---|
-| **External audio** | Not supported | iPod MFi digital audio (DACs, speakers, docks) |
-| **Cover Flow** | 3 slides, no status bar, 70-degree tilt | 7 slides, status bar, parallel projection |
-| **SSD idle** | Full power-down, ~530 ms wake | Clock-gate, <5 ms wake (HDD mode preserved) |
-| **Codec power** | Always on | Auto power-down on idle |
-| **Main menu** | 12+ items | 5 items |
-| **USB power** | Charges from any USB source | Smart charge gating for low-power accessories |
-| **Auto-poweroff + USB** | Blocked indefinitely | Works for non-charging accessories |
+|                         | Stock Rockbox                           | Rockpod                                        |
+| ----------------------- | --------------------------------------- | ---------------------------------------------- |
+| **External audio**      | Not supported                           | iPod MFi digital audio (DACs, speakers, docks) |
+| **Cover Flow**          | 3 slides, no status bar, 70-degree tilt | 7 slides, status bar, parallel projection      |
+| **SSD idle**            | Full power-down, ~530 ms wake           | Clock-gate, <5 ms wake (HDD mode preserved)    |
+| **Codec power**         | Always on                               | Auto power-down on idle                        |
+| **Main menu**           | 12+ items                               | 5 items                                        |
+| **USB power**           | Charges from any USB source             | Smart charge gating for low-power accessories  |
+| **Auto-poweroff + USB** | Blocked indefinitely                    | Works for non-charging accessories             |
 
 ---
 
