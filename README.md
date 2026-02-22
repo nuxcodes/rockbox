@@ -101,12 +101,12 @@ Stock PictureFlow shows 3 slides, uses hardcoded colors, and is buried in the pl
 | Cover Flow | Full-screen mode |
 |:---:|:---:|
 | <img src="screenshots/cover-flow.png" width="280"> | <img src="screenshots/cover-flow-no-statusbar.png" width="280"> |
-| Status bar with "Cover Flow" title | Status bar toggled off |
+| Status bar on | Status bar toggled off |
 
 | Track list | Display settings |
 |:---:|:---:|
 | <img src="screenshots/cover-flow-tracklist.png" width="280"> | <img src="screenshots/cover-flow-settings.png" width="280"> |
-| Title only — no disc/track number prefix | Slide tuck, parallel slides, crossfade, speed |
+| Title only — no track number prefix | Slide tuck, crossfade, speed |
 
 - **Theme-aware colors** — slide edges and backgrounds fade toward your theme's background color, not hardcoded black
 - **Status bar support** — integrates with the SBS status bar, showing "Cover Flow" in the title bar. Can be toggled off for full-screen mode
