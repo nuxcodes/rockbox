@@ -194,6 +194,7 @@ static void NORETURN_ATTR storage_thread(void)
 
 #if (CONFIG_STORAGE & STORAGE_ATA)
         case Q_STORAGE_SLEEP:
+        case Q_STORAGE_PRE_WAKE:
             storage_event_send(bdcast, ev.id, 0);
             break;
 #endif

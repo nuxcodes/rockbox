@@ -1377,6 +1377,17 @@ int ata_event(long id, intptr_t data)
     {
         ata_last_activity_value = current_tick - ata_sleep_timeout + HZ / 5;
     }
+    else if (id == Q_STORAGE_PRE_WAKE)
+    {
+        if (ata_ssd_mode && !ata_powered)
+        {
+            mutex_lock(&ata_mutex);
+            if (!ata_powered)
+                ata_power_up();
+            mutex_unlock(&ata_mutex);
+        }
+        ata_set_active();
+    }
     else if (id == SYS_USB_CONNECTED)
     {
         STG_EVENT_ASSERT_ACTIVE(STORAGE_ATA);

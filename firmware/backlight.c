@@ -533,10 +533,11 @@ static void backlight_update_state(void)
 #else
         backlight_hw_on();
 #endif
-        /* Pre-wake SSD from deep sleep so disk access is ready
-         * by the time the user navigates the UI. */
+        /* Async pre-wake SSD from deep sleep so disk access is ready
+         * by the time the user navigates the UI. Non-blocking — the
+         * storage thread handles the actual power-up. */
         if (storage_get_ssd_mode())
-            storage_spin();
+            storage_post_event(Q_STORAGE_PRE_WAKE, 0);
     }
 }
 

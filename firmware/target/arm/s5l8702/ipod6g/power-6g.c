@@ -27,6 +27,7 @@
 #include "pmu-target.h"
 #include "usb_core.h"   /* for usb_charging_maxcurrent_change */
 #include "backlight.h"
+#include "timeout.h"
 
 static int idepowered;
 
@@ -126,43 +127,103 @@ void usb_charging_maxcurrent_change(int maxcurrent)
 }
 #endif
 
+static struct timeout chrg_monitor_tmo;
+static volatile bool chrg_saw_discharge;
+
+/* Runs from tick ISR every 10ms.  Catches brief !CHRG HIGH
+ * pulses that the 500ms power thread polling misses.  At high
+ * battery (>80%), the LTC4066 sustains low charge current from
+ * weak USB sources but briefly drops out every 5-10s for <500ms. */
+static int chrg_monitor_cb(struct timeout *tmo)
+{
+    (void)tmo;
+    if (PDAT(11) & 0x10)   /* !CHRG HIGH = not charging */
+        chrg_saw_discharge = true;
+    return 1;  /* re-run next tick (10ms) */
+}
+
 unsigned int power_input_status(void)
 {
     static bool usb_charger_detected;
     static bool prev_bl_on;
+    static bool monitoring;
+    static int debounce;
     unsigned int status = POWER_INPUT_NONE;
     if (usb_detect() == USB_INSERTED)
     {
         status |= POWER_INPUT_USB;
         bool bl_on = is_backlight_on(true);
-        if (bl_on)
+        if (bl_on && !prev_bl_on)
         {
-            /* Backlight on: enable C1 so charging_state() reflects
-             * the real hardware state. */
-            GPIOCMD = 0xc010e | 0;  /* C1 LOW: allow charge */
-            /* Skip sample on the first poll after BL off->on to let
-             * the LTC4066 settle after C1 transition.  Without this,
-             * a stale/transient !CHRG reading causes a brief false
-             * charging indication. */
-            if (prev_bl_on)
-                usb_charger_detected = charging_state();
+            /* BL just turned on: probe C1, start monitor */
+            GPIOCMD = 0xc010e | 0;  /* C1 LOW */
+            chrg_saw_discharge = false;
+            debounce = 0;
+            if (!monitoring)
+            {
+                timeout_register(&chrg_monitor_tmo, chrg_monitor_cb,
+                                 1, 0);
+                monitoring = true;
+            }
         }
-        else if (!usb_charger_detected)
+        else if (bl_on)
         {
-            /* Backlight off + no charger detected: set C1 HIGH to
-             * prevent trickle charge from weak USB sources. */
-            GPIOCMD = 0xc010e | 1;  /* C1 HIGH: block charge */
+            /* Check high-frequency monitor flag */
+            if (chrg_saw_discharge)
+            {
+                chrg_saw_discharge = false;
+                usb_charger_detected = false;
+                debounce = 0;
+            }
+            else if (!usb_charger_detected)
+            {
+                if (++debounce >= 8)
+                {
+                    usb_charger_detected = true;
+                    debounce = 0;
+                }
+            }
+            /* For charger removal (PB toggled off): only count
+             * false readings.  Don't reset on true — oscillation
+             * (~50/50) must accumulate false readings to clear. */
+            else if (!charging_state())
+            {
+                if (++debounce >= 8)
+                {
+                    usb_charger_detected = false;
+                    debounce = 0;
+                }
+            }
+            /* true readings: don't reset — oscillation must
+             * be able to clear via accumulated false readings. */
         }
-        /* Backlight off + charger detected: C1 stays LOW so
-         * charging continues from the real charger source. */
+        else
+        {
+            /* BL off: stop monitor, control C1 */
+            if (monitoring)
+            {
+                timeout_cancel(&chrg_monitor_tmo);
+                monitoring = false;
+            }
+            if (!usb_charger_detected)
+                GPIOCMD = 0xc010e | 1;  /* C1 HIGH: block */
+        }
+        /* BL off + charger detected: C1 stays LOW, charging
+         * continues from the real charger source. */
         if (usb_charger_detected)
             status |= POWER_INPUT_USB_CHARGER;
         prev_bl_on = bl_on;
     }
     else
     {
+        if (monitoring)
+        {
+            timeout_cancel(&chrg_monitor_tmo);
+            monitoring = false;
+        }
         usb_charger_detected = false;
         prev_bl_on = false;
+        debounce = 0;
     }
     if (pmu_firewire_present())
         status |= POWER_INPUT_MAIN_CHARGER;
