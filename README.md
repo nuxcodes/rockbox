@@ -14,7 +14,7 @@
 
 ---
 
-Rockpod is a Rockbox fork for iPod Classic. It adds digital audio output to iPod MFi accessories over the dock connector (DACs, speakers, docks, car stereos), a rewritten PictureFlow modeled on Apple's Cover Flow, SSD-aware power management, and a streamlined menu focused on music playback.
+Rockpod is a [Rockbox](https://www.rockbox.org) fork for iPod Classic. It adds digital audio output to iPod MFi accessories over the dock connector (DACs, speakers, docks, car stereos), a rewritten PictureFlow modeled on Apple's Cover Flow, SSD-aware power management, and a streamlined menu focused on music playback.
 
 Rockpod supports both HDD and iFlash-modded iPod Classic units. It's a drop-in replacement for the official Rockbox firmware, with no reformatting or data loss.
 
