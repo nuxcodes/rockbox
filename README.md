@@ -6,7 +6,7 @@
     MFi digital audio, SSD optimization, Cover Flow.
   </p>
   <p align="center">
-    <a href="https://github.com/nuxcodes/rockpod/releases/latest"><img src="https://img.shields.io/github/v/release/nuxcodes/rockpod?style=flat-square&color=blue" alt="Latest Release"></a>
+    <a href="https://github.com/nuxcodes/rockpod/releases/latest"><img src="https://img.shields.io/github/v/release/nuxcodes/rockbox?style=flat-square&color=blue" alt="Latest Release"></a>
     <br/>
     <a href='https://ko-fi.com/B0B61UR8ZH' target='_blank'><img height='36' style='border:0px;height:36px;' src='https://storage.ko-fi.com/cdn/kofi5.png?v=6' border='0' alt='Buy Me a Coffee at ko-fi.com' /></a>
   </p>
