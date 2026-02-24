@@ -360,6 +360,11 @@ static int iap_task(struct timeout *tmo)
 {
     (void) tmo;
 
+    /* No accessory connected yet -- tick slowly to avoid unnecessary
+     * wakeups while the IAP thread is idle. */
+    if (!iap_running)
+        return MS_TO_TICKS(1000);
+
     queue_post(&iap_queue, IAP_EV_TICK, 0);
 
     /* After auth completes and no active work remains, reduce tick
@@ -464,47 +469,52 @@ static void iap_track_changed(unsigned short id, void *ignored)
     }
 }
 
-/* Do general setup of the needed infrastructure.
+/* Set up the IAP infrastructure.
  *
- * Please note that a lot of additional work is done by iap_start()
+ * On the first call (boot), creates the message queue, handler thread
+ * and notification timer.  On subsequent calls (e.g. USB HID reconnect)
+ * only resets the device state, avoiding duplicate threads.
  */
 void iap_setup(const int ratenum)
 {
     iap_bitrate_set(ratenum);
     iap_remotebtn = BUTTON_NONE;
     iap_setupflag = true;
-    iap_started = false;
     iap_running = false;
+
+    if (!iap_started)
+    {
+        unsigned int tid;
+
+        iap_reset_device(&device);
+        queue_init(&iap_queue, true);
+        tid = create_thread(iap_thread, thread_stack, sizeof(thread_stack),
+                0, "iap"
+                IF_PRIO(, PRIORITY_SYSTEM)
+                IF_COP(, CPU));
+        if (!tid)
+            panicf("Could not create iap thread");
+        timeout_register(&iap_task_tmo, iap_task, MS_TO_TICKS(100),
+                (intptr_t)NULL);
+        add_event(PLAYBACK_EVENT_TRACK_CHANGE, iap_track_changed);
+        iap_started = true;
+    }
+    else
+    {
+        iap_reset_device(&device);
+    }
 }
 
-/* Actually bring up the message queue, message handler thread and
- * notification timer
+/* Trigger buffer allocation for the IAP thread.
  *
- * NOTE: This is running in interrupt context
+ * Called from iap_getc() on the first received sync byte.
+ * May run in interrupt context (serial UART ISR), so only
+ * queue_post() is used here -- the thread and queue were
+ * already created by iap_setup().
  */
 static void iap_start(void)
 {
-    unsigned int tid;
-
-    if (iap_started)
-        return;
-
-    iap_reset_device(&device);
-    queue_init(&iap_queue, true);
-    tid = create_thread(iap_thread, thread_stack, sizeof(thread_stack),
-            0, "iap"
-            IF_PRIO(, PRIORITY_SYSTEM)
-            IF_COP(, CPU));
-    if (!tid)
-        panicf("Could not create iap thread");
-    timeout_register(&iap_task_tmo, iap_task, MS_TO_TICKS(100), (intptr_t)NULL);
-    add_event(PLAYBACK_EVENT_TRACK_CHANGE, iap_track_changed);
-
-    /* Since we cannot allocate memory while in interrupt context
-     * post a message to our own queue to get that done
-     */
     queue_post(&iap_queue, IAP_EV_MALLOC, 0);
-    iap_started = true;
 }
 
 static void iap_malloc(void)

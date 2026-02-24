@@ -533,11 +533,6 @@ static void backlight_update_state(void)
 #else
         backlight_hw_on();
 #endif
-        /* Async pre-wake SSD from deep sleep so disk access is ready
-         * by the time the user navigates the UI. Non-blocking — the
-         * storage thread handles the actual power-up. */
-        if (storage_get_ssd_mode())
-            storage_post_event(Q_STORAGE_PRE_WAKE, 0);
     }
 }
 
@@ -829,6 +824,11 @@ void backlight_on(void)
 {
     if(!ignore_backlight_on)
     {
+        /* Pre-wake SSD from ISR context so the storage thread
+         * starts power-up before the UI thread processes the
+         * button event that triggered this. */
+        if (storage_get_ssd_mode())
+            storage_post_event(Q_STORAGE_PRE_WAKE, 0);
         queue_remove_from_head(&backlight_queue, BACKLIGHT_ON);
         queue_post(&backlight_queue, BACKLIGHT_ON, 0);
     }
@@ -899,8 +899,8 @@ void backlight_hold_changed(bool hold_button)
     if (!hold_button || (backlight_on_button_hold > 0))
     {
         /* if unlocked or override in effect */
-
-        /*backlight_on(); REMOVED*/
+        if (storage_get_ssd_mode())
+            storage_post_event(Q_STORAGE_PRE_WAKE, 0);
         queue_remove_from_head(&backlight_queue, BACKLIGHT_ON);
         queue_post(&backlight_queue, BACKLIGHT_ON, 0);
     }
