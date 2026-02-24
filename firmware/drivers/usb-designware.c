@@ -38,7 +38,7 @@
 #include "usb-designware.h"
 
 /* Define LOGF_ENABLE to enable logf output in this file */
-/* #define LOGF_ENABLE */
+#define LOGF_ENABLE
 #include "logf.h"
 
 
