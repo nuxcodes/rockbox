@@ -263,6 +263,7 @@
 /* Disable iAP when LOGF_SERIAL is enabled to avoid conflicts */
 #ifndef LOGF_SERIAL
 #define IPOD_ACCESSORY_PROTOCOL
+#define TARGET_EXTRA_THREADS 1
 #endif
 #endif
 
