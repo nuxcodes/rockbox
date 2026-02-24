@@ -565,12 +565,14 @@ static struct menu_callback_with_desc root_menu_desc = {
         item_callback, ID2P(LANG_ROCKBOX_TITLE), Icon_Rockbox };
 
 static struct menu_table menu_table[] = {
-    /* iPod Classic 6G custom: concise menu */
 #ifdef HAVE_TAGCACHE
     { "pictureflow", &pictureflow_item },
     { "database", &db_browser },
 #endif
+    { "files", &file_browser },
     { "wps", &wps_item },
+    { "plugins", &rocks_browser },
+    { "shortcuts", &shortcut_menu },
     { "settings", &menu_ },
     { "system_menu", &system_menu_ },
 };

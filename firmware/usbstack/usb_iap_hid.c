@@ -163,6 +163,7 @@ struct usb_class_driver_ep_allocation usb_iap_hid_ep_allocs[1] = {
 /* State */
 static int usb_interface;
 static bool iap_hid_active = false;
+static bool iap_hid_transport_active = false;
 
 /* TX buffer for sending HID IN reports */
 static unsigned char tx_buf[64] USB_DEVBSS_ATTR;
@@ -256,6 +257,18 @@ static void iap_hid_process_rx(const unsigned char *data, int len)
 
     if (len < 3)
         return;
+
+    /* Lazy transport activation: defer iAP transport override and
+     * iap_setup() until actual HID data arrives.  This prevents
+     * clobbering serial IAP on docks (like the Onkyo ND-S1) that
+     * use USB only for audio, not for iAP control. */
+    if (!iap_hid_transport_active)
+    {
+        saved_transport_send = iap_transport_send;
+        iap_transport_send = iap_hid_tx;
+        iap_hid_transport_active = true;
+        iap_setup(0);
+    }
 
     uint8_t report_id = data[0];
     uint8_t link_ctrl = data[1];
@@ -368,13 +381,10 @@ void usb_iap_hid_init_connection(void)
 {
     logf("iap_hid: init connection");
     iap_hid_active = true;
-
-    /* override iAP transport to USB HID */
-    saved_transport_send = iap_transport_send;
-    iap_transport_send = iap_hid_tx;
-
-    /* initialize iAP for USB mode */
-    iap_setup(0);
+    /* Transport override and iap_setup() are deferred until
+     * actual iAP data arrives via SET_REPORT.  This prevents
+     * clobbering serial IAP on docks (like the Onkyo ND-S1)
+     * that use USB only for audio, not for iAP control. */
 }
 
 void usb_iap_hid_disconnect(void)
@@ -383,8 +393,11 @@ void usb_iap_hid_disconnect(void)
     iap_hid_active = false;
     iap_hid_rx_in_progress = false;
 
-    /* restore serial transport */
-    iap_transport_send = saved_transport_send;
+    if (iap_hid_transport_active)
+    {
+        iap_transport_send = saved_transport_send;
+        iap_hid_transport_active = false;
+    }
 }
 
 void usb_iap_hid_transfer_complete(int ep, int dir, int status, int length)
