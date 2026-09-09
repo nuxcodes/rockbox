@@ -482,6 +482,22 @@ void usb_storage_init_connection(void)
         locked[i] = false;
         ejected[i] = !check_disk_present(IF_MD(i));
         queue_broadcast(SYS_USB_LUN_LOCKED, (i<<16)+0);
+
+#if defined(MAX_VIRT_SECTOR_SIZE) && defined(DEFAULT_VIRT_SECTOR_SIZE)
+        /* The block size we advertise must match the units the MBR and FAT
+         * were written in (4096 on iPod Classic, 2048 on iPod Video when
+         * formatted by iTunes). Don't trust the value left over from the
+         * last disk_mount() -- it is 1 whenever we got here without a
+         * successful mount (bootloader USB mode, mount failure, ...) and
+         * the host then can't find the filesystem. Look at the disk. */
+        if(!ejected[i]) {
+            int mult = disk_probe_sector_multiplier(IF_MD(i));
+            logf("ums: probed sector mult %d (was %d)", mult,
+                 disk_get_sector_multiplier(IF_MD(i)));
+            if(mult > 0)
+                disk_set_sector_multiplier(IF_MD(i,) mult);
+        }
+#endif
     }
 }
 
