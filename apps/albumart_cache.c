@@ -28,6 +28,14 @@
 #include "file.h"
 #include "kernel.h"
 #include "logf.h"
+
+/* Always-on stall diagnostic — bypasses per-file LOGF_ENABLE */
+#ifdef ROCKBOX_HAS_LOGF
+#define stallf _logf
+#else
+#define stallf(...) do { } while(0)
+#endif
+
 #include "pathfuncs.h"
 #include "settings.h"
 #include "string-extra.h"
@@ -231,6 +239,13 @@ static int decode_ident_to_scratch(const struct aa_ident *id)
     struct mp3_albumart embedded;
     struct mp3_albumart *emb = NULL;
     const char *path = id->path;
+    const char *tail = path;
+
+    if (tail)
+    {
+        const char *p = strrchr(tail, '/');
+        if (p) tail = p + 1;
+    }
 
     if (!scratch || max_size == 0 || slot_block_size[d] == 0)
         return 0;
@@ -243,12 +258,21 @@ static int decode_ident_to_scratch(const struct aa_ident *id)
         emb = &embedded;
     }
 
+    stallf("AA dec start src=%d emb=%lu/%lu %s",
+           (int)id->src, emb ? (unsigned long)emb->pos : 0UL,
+           emb ? (unsigned long)emb->size : 0UL, tail ? tail : "?");
+
     fd = open(path, O_RDONLY);
     if (fd < 0)
+    {
+        stallf("AA dec open fail %s", tail ? tail : "?");
         return 0;
+    }
 
     rc = albumart_decode_fd(fd, path, &slot_dim[d], emb, scratch, max_size);
     close(fd);
+
+    stallf("AA dec done rc=%d %s", rc, tail ? tail : "?");
 
     if (rc <= (int)sizeof(struct bitmap))
         return 0;

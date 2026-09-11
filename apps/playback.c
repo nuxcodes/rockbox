@@ -50,6 +50,7 @@
 #include "audiohw.h"
 #include "general.h"
 #include <stdio.h>
+#include <string.h>
 
 #ifdef HAVE_TAGCACHE
 #include "tagcache.h"
@@ -90,6 +91,13 @@
 #define LOGF_ENABLE
 #endif
 #include "logf.h"
+
+/* Always-on stall diagnostic — bypasses per-file LOGF_ENABLE */
+#ifdef ROCKBOX_HAS_LOGF
+#define stallf _logf
+#else
+#define stallf(...) do { } while(0)
+#endif
 
 /* Macros to enable logf for queues
    logging on SYS_TIMEOUT can be disabled */
@@ -974,11 +982,28 @@ static void playback_aa_process_one(void)
 
     if (playlist_check(off))
     {
+        bool idle = playback_aa_buffer_idle();
         wipe_mp3entry(&aa_id3);
         if (playback_aa_fill_id3(off, &aa_id3))
+        {
+            const char *tail = aa_id3.path;
+            if (tail)
+            {
+                const char *p = strrchr(tail, '/');
+                if (p) tail = p + 1;
+            }
+            stallf("AA start off=%d idle=%d fill=%d %s",
+                   off, (int)idle, (int)filling, tail ? tail : "?");
             current_done = albumart_cache_work(off, &aa_id3);
+        }
         else
+        {
+            stallf("AA start off=%d idle=%d fill=%d (no id3)",
+                   off, (int)idle, (int)filling);
             current_done = albumart_cache_work(off, NULL);
+        }
+        stallf("AA done off=%d ok=%d fill=%d", off, (int)current_done,
+               (int)filling);
     }
 
     if (current_done)
@@ -2560,7 +2585,10 @@ static void audio_on_buffering(int event)
     {
     case BUFFER_EVENT_BUFFER_LOW:
         if (filling != STATE_FULL && filling != STATE_END_OF_PLAYLIST)
+        {
+            stallf("STALL: BUFFER_LOW ignored filling=%d", (int)filling);
             return; /* Should be nothing left to fill */
+        }
 
         /* Clear old tracks and continue buffering where it left off */
         action = TRACK_LIST_KEEP_NEW;

@@ -41,6 +41,13 @@
 /* #define LOGF_ENABLE */
 #include "logf.h"
 
+/* Always-on stall diagnostic — bypasses per-file LOGF_ENABLE */
+#ifdef ROCKBOX_HAS_LOGF
+#define stallf _logf
+#else
+#define stallf(...) do { } while(0)
+#endif
+
 #define BUF_MAX_HANDLES 384
 
 /* macros to enable logf for queues
@@ -640,6 +647,9 @@ static bool buffer_handle(int handle_id, size_t to_buffer)
 
         if (h->fd < 0) {
             /* could not open the file, truncate it where it is */
+            stallf("STALL: reopen fail hid=%d type=%d end=%ld fsz=%ld %s",
+                   handle_id, (int)h->type, (long)h->end,
+                   (long)h->filesize, h->path);
             h->filesize = h->end;
             return true;
         }
@@ -697,6 +707,9 @@ static bool buffer_handle(int handle_id, size_t to_buffer)
                 break;
             }
 
+            stallf("STALL: read<=0 hid=%d type=%d rc=%ld end=%ld fsz=%ld %s",
+                   handle_id, (int)h->type, (long)rc, (long)h->end,
+                   (long)h->filesize, h->path);
             logf("File ended %lu bytes early\n",
                  (unsigned long)(h->filesize - h->end));
             h->filesize = h->end;
@@ -1618,14 +1631,16 @@ static void NORETURN_ATTR buffering_thread(void)
                 /* The buffer is low and we're idle, just watching the levels
                    - call the callbacks to get new data */
                 send_event(BUFFER_EVENT_BUFFER_LOW, NULL);
+            }
 
-                /* Continue anything else we haven't finished - it might
-                   get booted off or stop early because the receiver hasn't
-                   had a chance to clear anything yet */
-                if (data_counters.remaining > 0) {
-                    shrink_buffer();
-                    filling = fill_buffer();
-                }
+            /* Resume filling handles that still have data on disk.
+               This must not be gated on BUF_WATERMARK: the watermark
+               controls when to ask playback for new tracks, but existing
+               handles with remaining data should always be resumed once
+               the codec has freed ring space. */
+            if (data_counters.remaining > 0) {
+                shrink_buffer();
+                filling = fill_buffer();
             }
         }
     }
